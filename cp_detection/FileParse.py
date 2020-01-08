@@ -96,7 +96,7 @@ class Json2App():
         if 'phas_offset' not in self.json_data.keys() or eval_phas_offset:
             Pe0 = self._CalcPhaseOffset()
         else:
-            Pe0 = self.json_data['phase_offset']
+            Pe0 = self.json_data['phas_offset']
         self.Pe = self._CalcElecPhase(Pe0)
         self.Ae = self._CalcElecAmp()
 
@@ -169,8 +169,8 @@ class Json2App():
 
         return Am, Pm, A0
 
-    def __call__(self):
-        app_curve = ApproachCurve(self.z, self.Am, self.Pm, self.f, self.res_params['f0'], self.res_params['Q'], self.A0)
+    def __call__(self, type_ = 'both'):
+        app_curve = ApproachCurve(type_, self.filepath, self.z, self.Am, self.Pm, self.f, self.res_params['f0'], self.res_params['Q'], self.A0)
         return app_curve
         
 if __name__ == "__main__":
