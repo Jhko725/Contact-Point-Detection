@@ -172,8 +172,3 @@ class Json2App():
     def __call__(self, type_ = 'both'):
         app_curve = ApproachCurve(type_, self.filepath, self.z, self.Am, self.Pm, self.f, self.res_params['f0'], self.res_params['Q'], self.A0)
         return app_curve
-        
-if __name__ == "__main__":
-    files = FileParser('../Data/Experiment/Tapping', 'app', 'json')
-    for file_name in files:
-        print(file_name)

@@ -37,9 +37,11 @@ class ApproachCurve():
         Methods
         -------
         __len__()
-            Returns the length of the approach curve data.
+            Returns the length of the approach curve data.  
         __repr__()
             Representation for the ApproachCurve object.
+        __eq__(other)
+            Comparison between two ApproachCurve objects. True if both objects are created from the same raw data file.
         app()
             Returns the approach part of a given approach curve. Raises AssertionError if called on a retraction-only curve.
         ret()
@@ -74,6 +76,12 @@ class ApproachCurve():
         """
         type_description = {'both': 'full approach curve', 'app': 'approach-only', 'ret': 'retraction-only'}
         return 'An {} data with parameters f = {:8.2f}Hz, f0 = {:8.2f}Hz, Q = {:8.2f}, and A0 = {:8.2e}nm \nRaw data file is at {}'.format(type_description[self.type_], self.f, self.f0, self.Q, self.A0*1e9, self.filepath)
+
+    def __eq__(self, other):
+        """
+        Comparison between two ApproachCurve objects. True if both objects are created from the same raw data file.
+        """
+        return self.filepath == other.filepath
 
     def app(self):
         """

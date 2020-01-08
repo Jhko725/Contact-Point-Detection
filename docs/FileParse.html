@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
+<meta name="generator" content="pdoc 0.7.2" />
+<title>cp_detection.FileParse API documentation</title>
+<meta name="description" content="" />
+<link href='https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.0/normalize.min.css' rel='stylesheet'>
+<link href='https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/8.0.0/sanitize.min.css' rel='stylesheet'>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css" rel="stylesheet">
+<style>.flex{display:flex !important}body{line-height:1.5em}#content{padding:20px}#sidebar{padding:30px;overflow:hidden}.http-server-breadcrumbs{font-size:130%;margin:0 0 15px 0}#footer{font-size:.75em;padding:5px 30px;border-top:1px solid #ddd;text-align:right}#footer p{margin:0 0 0 1em;display:inline-block}#footer p:last-child{margin-right:30px}h1,h2,h3,h4,h5{font-weight:300}h1{font-size:2.5em;line-height:1.1em}h2{font-size:1.75em;margin:1em 0 .50em 0}h3{font-size:1.4em;margin:25px 0 10px 0}h4{margin:0;font-size:105%}a{color:#058;text-decoration:none;transition:color .3s ease-in-out}a:hover{color:#e82}.title code{font-weight:bold}h2[id^="header-"]{margin-top:2em}.ident{color:#900}pre code{background:#f8f8f8;font-size:.8em;line-height:1.4em}code{background:#f2f2f1;padding:1px 4px;overflow-wrap:break-word}h1 code{background:transparent}pre{background:#f8f8f8;border:0;border-top:1px solid #ccc;border-bottom:1px solid #ccc;margin:1em 0;padding:1ex}#http-server-module-list{display:flex;flex-flow:column}#http-server-module-list div{display:flex}#http-server-module-list dt{min-width:10%}#http-server-module-list p{margin-top:0}.toc ul,#index{list-style-type:none;margin:0;padding:0}#index code{background:transparent}#index h3{border-bottom:1px solid #ddd}#index ul{padding:0}#index h4{font-weight:bold}#index h4 + ul{margin-bottom:.6em}@media (min-width:200ex){#index .two-column{column-count:2}}@media (min-width:300ex){#index .two-column{column-count:3}}dl{margin-bottom:2em}dl dl:last-child{margin-bottom:4em}dd{margin:0 0 1em 3em}#header-classes + dl > dd{margin-bottom:3em}dd dd{margin-left:2em}dd p{margin:10px 0}.name{background:#eee;font-weight:bold;font-size:.85em;padding:5px 10px;display:inline-block;min-width:40%}.name:hover{background:#e0e0e0}.name > span:first-child{white-space:nowrap}.name.class > span:nth-child(2){margin-left:.4em}.inherited{color:#999;border-left:5px solid #eee;padding-left:1em}.inheritance em{font-style:normal;font-weight:bold}.desc h2{font-weight:400;font-size:1.25em}.desc h3{font-size:1em}.desc dt code{background:inherit}.source summary,.git-link-div{color:#666;text-align:right;font-weight:400;font-size:.8em;text-transform:uppercase}.source summary > *{white-space:nowrap;cursor:pointer}.git-link{color:inherit;margin-left:1em}.source pre{max-height:500px;overflow:auto;margin:0}.source pre code{font-size:12px;overflow:visible}.hlist{list-style:none}.hlist li{display:inline}.hlist li:after{content:',\2002'}.hlist li:last-child:after{content:none}.hlist .hlist{display:inline;padding-left:1em}img{max-width:100%}.admonition{padding:.1em .5em;margin-bottom:1em}.admonition-title{font-weight:bold}.admonition.note,.admonition.info,.admonition.important{background:#aef}.admonition.todo,.admonition.versionadded,.admonition.tip,.admonition.hint{background:#dfd}.admonition.warning,.admonition.versionchanged,.admonition.deprecated{background:#fd4}.admonition.error,.admonition.danger,.admonition.caution{background:lightpink}</style>
+<style media="screen and (min-width: 700px)">@media screen and (min-width:700px){#sidebar{width:30%}#content{width:70%;max-width:100ch;padding:3em 4em;border-left:1px solid #ddd}pre code{font-size:1em}.item .name{font-size:1em}main{display:flex;flex-direction:row-reverse;justify-content:flex-end}.toc ul ul,#index ul{padding-left:1.5em}.toc > ul > li{margin-top:.5em}}</style>
+<style media="print">@media print{#sidebar h1{page-break-before:always}.source{display:none}}@media print{*{background:transparent !important;color:#000 !important;box-shadow:none !important;text-shadow:none !important}a[href]:after{content:" (" attr(href) ")";font-size:90%}a[href][title]:after{content:none}abbr[title]:after{content:" (" attr(title) ")"}.ir a:after,a[href^="javascript:"]:after,a[href^="#"]:after{content:""}pre,blockquote{border:1px solid #999;page-break-inside:avoid}thead{display:table-header-group}tr,img{page-break-inside:avoid}img{max-width:100% !important}@page{margin:0.5cm}p,h2,h3{orphans:3;widows:3}h1,h2,h3,h4,h5,h6{page-break-after:avoid}}</style>
+</head>
+<body>
+<main>
+<article id="content">
+<header>
+<h1 class="title">Module <code>cp_detection.FileParse</code></h1>
+</header>
+<section id="section-intro">
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">import glob
+import os
+import json
+import numpy as np
+from .ApproachCurve import ApproachCurve
+
+def FileParser(data_dir, data_type, data_format = &#39;txt&#39;):
+    &#34;&#34;&#34;
+    Returns the list of paths of all measurement data in the subdirectories of data_dir corresponding to the given data_type and data_format.
+
+    Parameters
+    ----------
+    data_dir: path
+        Directory for the measurement data. Note that all data must be stored in the direct subdirectory of data_dir.
+    data_type: &#34;app&#34; or &#34;res&#34;
+        Corresponds to the type of the measurement. &#34;app&#34; for approach curves and &#34;res&#34; for resonance curves.
+    data_format: &#34;str&#34;
+        The file extension of the desired data. &#34;txt&#34; by default. 
+
+    Returns
+    -------
+    files: list
+        A list of filepaths corresponding to the desired data_type and data_format
+    &#34;&#34;&#34;
+
+    type_string = {&#39;res&#39;: &#39;*Resonance*.&#39;, &#39;app&#39;: &#39;*Approach*.&#39;}
+
+    path = os.path.join(data_dir, &#39;*&#39;, type_string[data_type] + data_format)
+
+    files = glob.glob(path, recursive = True)
+
+    print(&#39;{} files loaded&#39;.format(len(files)))
+    
+    return files
+
+class Json2App():
+    &#34;&#34;&#34;
+    A class to convert json format approach curve raw data into instances of the class ApproachData. 
+    
+    ...
+
+    Attributes
+    ----------
+    filepath : path
+        Path to the json file to be converted.
+    z : numpy 1D array
+        Measured z data in units of [m].
+    Ar : numpy 1D array
+        Measured raw amplitude data in units of [V_lockin]. 
+        [V_lockin] is the voltage recorded by the lock_in amplifier.
+    Pr : numpy 1D array
+        Measured raw phase data in units of [V_lockin]. 
+        [V_lockin] is the voltage recorded by the lock_in amplifier.
+    
+    
+    Methods
+    -------
+    _CalibPhasOffset()
+        Calculates the phase offset according to the formula of M. Lee et al, App. Phys. Lett. 91, 023117(2007).
+    _CalcElecPhase(Pe0)
+        Converts the raw phase data Pr[V_lockin] to the electrical phase data Pe[rad]. 
+        The conversion formula is: Pe = Pr * pi/10 + Pe0, where Pe0 is the electrical phase offset.
+    &#34;&#34;&#34;    
+
+    def __init__(self, jsonpath, eval_res_params = False, respath = None, eval_phas_offset = False):
+        &#34;&#34;&#34;
+        Parameters
+        ----------
+        jsonpath : path
+            Path to the json file to be converted.
+        eval_res_params : bool
+            Boolean flag to determine whether to compute the resonance curve fitting parameters or not. Default: False.
+            If this flag is set to True or the json file does not contain any one of the fields &#34;w0&#34;, &#34;Q&#34;, &#34;C0_C&#34; and &#34;I0_r&#34;, the resonance curve fiting parameters are automatically computed.
+        respath : path
+            Path to the resonance curve file corresponding to the approach curve data. 
+            Only required if eval_res_params == True.
+        eval_phas_offset : bool
+            Boolean flag to determine whether to compute the electric phase offset Pe0 or not. Default: False.
+            If this flag is set to True or the json file does not contain the field &#34;phas_offset&#34;, Pe0 is automatically computed.
+        &#34;&#34;&#34;
+        self.filepath = jsonpath
+
+        with open(jsonpath) as json_file:
+            self.json_data = json.load(json_file)
+        
+        self.f = self.json_data[&#39;w&#39;] # driving frequency
+        self.z = np.array(self.json_data[&#39;z&#39;])
+
+        # Retrieve resonance curve parameters
+        if not all(param in self.json_data.keys() for param in [&#39;w0&#39;, &#39;Q&#39;, &#39;C0_C&#39;, &#39;I0_r&#39;]) or eval_res_params:
+            self.res_params = self._CalcResParams()
+        else:
+            self.res_params = {&#39;f0&#39;: self.json_data[&#39;w0&#39;], &#39;Q&#39;: self.json_data[&#39;Q&#39;], &#39;C0_C&#39; : self.json_data[&#39;C0_C&#39;], &#39;I0_raw&#39;: self.json_data[&#39;I0_r&#39;]}
+
+        # Calculate electric amplitude and phase
+        if &#39;phas_offset&#39; not in self.json_data.keys() or eval_phas_offset:
+            Pe0 = self._CalcPhaseOffset()
+        else:
+            Pe0 = self.json_data[&#39;phas_offset&#39;]
+        self.Pe = self._CalcElecPhase(Pe0)
+        self.Ae = self._CalcElecAmp()
+
+        # Calculate mechanical amplitude and phase
+        self.Am, self.Pm, self.A0 = self._CalcMechAmpPhas()
+        
+    def _CalcResParams(self):
+        return 0
+    
+    def _CalcPhaseOffset(self):
+        return 0
+
+    def _CalcElecPhase(self, Pe0):
+        &#34;&#34;&#34;
+        Converts the raw phase data Pr[V_lockin] to the electrical phase data Pe[rad]. 
+        The conversion formula is: Pe = Pr * pi/10 + Pe0, where Pe0 is the electrical phase offset.
+        
+        Parameters
+        ----------
+        Pe0 : float
+            Electrical phase offset, calculated according to M. Lee et al, App. Phys. Lett. 91, 023117(2007).
+        
+        Returns
+        -------
+        Pe : numpy 1D array
+            Electrical phase data in [rad].
+        &#34;&#34;&#34;
+        Pr = np.array(self.json_data[&#39;phas_r&#39;])
+        Pe = Pr*np.pi/10 + Pe0
+
+        return Pe
+
+    def _CalcElecAmp(self):
+        &#34;&#34;&#34;
+        Converts the raw amplitude data Ar[V_lockin] to the electrical amplitude data Ae[A].
+        The conversion is done as the following:
+        1) Ar : ( -10[V_lockin], 10[V_lockin] ) -&gt; ( -SEN[V], SEN[V] ), where SEN[V] is the lock in amplifier sensitivity.
+        2) ( -SEN[V], SEN[V] ) -&gt; Ae : (-SEN[V] * IVgain[A/V], SEN[V] * IVgain[A/V]), where IVgain[A/V] is the gain of the AFM amplifier circuit.
+        
+        Returns
+        -------
+        Ae : numpy 1D array
+            Electric amplitude data in [A].
+        &#34;&#34;&#34;
+        SEN = self.json_data[&#39;sens&#39;]
+        IVgain = self.json_data[&#39;IVgain&#39;]
+
+        Ar = np.array(self.json_data[&#39;amp_r&#39;])
+        Ae = (Ar/10)*SEN/IVgain
+
+        return Ae
+
+    def _CalcMechAmpPhas(self):
+        # Convert I0_raw[V] into I0[A]
+        SEN = self.json_data[&#39;sens&#39;]
+        IVgain = self.json_data[&#39;IVgain&#39;]
+        I0 = (self.res_params[&#39;I0_raw&#39;]/10)*SEN/IVgain
+        
+        # See M. Lee et al, App. Phys. Lett. 91, 023117(2007)
+        wC0V0 = (self.res_params[&#39;C0_C&#39;]*I0/self.res_params[&#39;Q&#39;])*self.f/self.res_params[&#39;f0&#39;]
+        
+        # first, calculate mechanical amplitude in (A), then convert to (m) using the piezoCf(m/A)
+        Am = np.sqrt(self.Ae**2 - 2*wC0V0*self.Ae*np.sin(self.Pe) + wC0V0**2)*self.json_data[&#39;piezoCf&#39;]
+        
+        # calculate mechanical phase in (rad)
+        Pm = np.arctan2(self.Ae*np.sin(self.Pe)-wC0V0, self.Ae*np.cos(self.Pe))
+
+        # Also calculate the free amplitude
+        A0 = I0*self.json_data[&#39;piezoCf&#39;]
+
+        return Am, Pm, A0
+
+    def __call__(self, type_ = &#39;both&#39;):
+        app_curve = ApproachCurve(type_, self.filepath, self.z, self.Am, self.Pm, self.f, self.res_params[&#39;f0&#39;], self.res_params[&#39;Q&#39;], self.A0)
+        return app_curve</code></pre>
+</details>
+</section>
+<section>
+</section>
+<section>
+</section>
+<section>
+<h2 class="section-title" id="header-functions">Functions</h2>
+<dl>
+<dt id="cp_detection.FileParse.FileParser"><code class="name flex">
+<span>def <span class="ident">FileParser</span></span>(<span>data_dir, data_type, data_format='txt')</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Returns the list of paths of all measurement data in the subdirectories of data_dir corresponding to the given data_type and data_format.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>data_dir</code></strong> :&ensp;<code>path</code></dt>
+<dd>Directory for the measurement data. Note that all data must be stored in the direct subdirectory of data_dir.</dd>
+<dt><strong><code>data_type</code></strong> :&ensp;<code>"app"</code> or <code>"res"</code></dt>
+<dd>Corresponds to the type of the measurement. "app" for approach curves and "res" for resonance curves.</dd>
+<dt><strong><code>data_format</code></strong> :&ensp;<code>"str"</code></dt>
+<dd>The file extension of the desired data. "txt" by default.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>files</code></strong> :&ensp;<code>list</code></dt>
+<dd>A list of filepaths corresponding to the desired data_type and data_format</dd>
+</dl></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def FileParser(data_dir, data_type, data_format = &#39;txt&#39;):
+    &#34;&#34;&#34;
+    Returns the list of paths of all measurement data in the subdirectories of data_dir corresponding to the given data_type and data_format.
+
+    Parameters
+    ----------
+    data_dir: path
+        Directory for the measurement data. Note that all data must be stored in the direct subdirectory of data_dir.
+    data_type: &#34;app&#34; or &#34;res&#34;
+        Corresponds to the type of the measurement. &#34;app&#34; for approach curves and &#34;res&#34; for resonance curves.
+    data_format: &#34;str&#34;
+        The file extension of the desired data. &#34;txt&#34; by default. 
+
+    Returns
+    -------
+    files: list
+        A list of filepaths corresponding to the desired data_type and data_format
+    &#34;&#34;&#34;
+
+    type_string = {&#39;res&#39;: &#39;*Resonance*.&#39;, &#39;app&#39;: &#39;*Approach*.&#39;}
+
+    path = os.path.join(data_dir, &#39;*&#39;, type_string[data_type] + data_format)
+
+    files = glob.glob(path, recursive = True)
+
+    print(&#39;{} files loaded&#39;.format(len(files)))
+    
+    return files</code></pre>
+</details>
+</dd>
+</dl>
+</section>
+<section>
+<h2 class="section-title" id="header-classes">Classes</h2>
+<dl>
+<dt id="cp_detection.FileParse.Json2App"><code class="flex name class">
+<span>class <span class="ident">Json2App</span></span>
+<span>(</span><span>jsonpath, eval_res_params=False, respath=None, eval_phas_offset=False)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>A class to convert json format approach curve raw data into instances of the class ApproachData. </p>
+<p>&hellip;</p>
+<h2 id="attributes">Attributes</h2>
+<dl>
+<dt><strong><code>filepath</code></strong> :&ensp;<code>path</code></dt>
+<dd>Path to the json file to be converted.</dd>
+<dt><strong><code>z</code></strong> :&ensp;<code>numpy</code> <code>1D</code> <code>array</code></dt>
+<dd>Measured z data in units of [m].</dd>
+<dt><strong><code>Ar</code></strong> :&ensp;<code>numpy</code> <code>1D</code> <code>array</code></dt>
+<dd>Measured raw amplitude data in units of [V_lockin].
+[V_lockin] is the voltage recorded by the lock_in amplifier.</dd>
+<dt><strong><code>Pr</code></strong> :&ensp;<code>numpy</code> <code>1D</code> <code>array</code></dt>
+<dd>Measured raw phase data in units of [V_lockin].
+[V_lockin] is the voltage recorded by the lock_in amplifier.</dd>
+</dl>
+<h2 id="methods">Methods</h2>
+<p>_CalibPhasOffset()
+Calculates the phase offset according to the formula of M. Lee et al, App. Phys. Lett. 91, 023117(2007).
+_CalcElecPhase(Pe0)
+Converts the raw phase data Pr[V_lockin] to the electrical phase data Pe[rad].
+The conversion formula is: Pe = Pr * pi/10 + Pe0, where Pe0 is the electrical phase offset.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>jsonpath</code></strong> :&ensp;<code>path</code></dt>
+<dd>Path to the json file to be converted.</dd>
+<dt><strong><code>eval_res_params</code></strong> :&ensp;<code>bool</code></dt>
+<dd>Boolean flag to determine whether to compute the resonance curve fitting parameters or not. Default: False.
+If this flag is set to True or the json file does not contain any one of the fields "w0", "Q", "C0_C" and "I0_r", the resonance curve fiting parameters are automatically computed.</dd>
+<dt><strong><code>respath</code></strong> :&ensp;<code>path</code></dt>
+<dd>Path to the resonance curve file corresponding to the approach curve data.
+Only required if eval_res_params == True.</dd>
+<dt><strong><code>eval_phas_offset</code></strong> :&ensp;<code>bool</code></dt>
+<dd>Boolean flag to determine whether to compute the electric phase offset Pe0 or not. Default: False.
+If this flag is set to True or the json file does not contain the field "phas_offset", Pe0 is automatically computed.</dd>
+</dl></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class Json2App():
+    &#34;&#34;&#34;
+    A class to convert json format approach curve raw data into instances of the class ApproachData. 
+    
+    ...
+
+    Attributes
+    ----------
+    filepath : path
+        Path to the json file to be converted.
+    z : numpy 1D array
+        Measured z data in units of [m].
+    Ar : numpy 1D array
+        Measured raw amplitude data in units of [V_lockin]. 
+        [V_lockin] is the voltage recorded by the lock_in amplifier.
+    Pr : numpy 1D array
+        Measured raw phase data in units of [V_lockin]. 
+        [V_lockin] is the voltage recorded by the lock_in amplifier.
+    
+    
+    Methods
+    -------
+    _CalibPhasOffset()
+        Calculates the phase offset according to the formula of M. Lee et al, App. Phys. Lett. 91, 023117(2007).
+    _CalcElecPhase(Pe0)
+        Converts the raw phase data Pr[V_lockin] to the electrical phase data Pe[rad]. 
+        The conversion formula is: Pe = Pr * pi/10 + Pe0, where Pe0 is the electrical phase offset.
+    &#34;&#34;&#34;    
+
+    def __init__(self, jsonpath, eval_res_params = False, respath = None, eval_phas_offset = False):
+        &#34;&#34;&#34;
+        Parameters
+        ----------
+        jsonpath : path
+            Path to the json file to be converted.
+        eval_res_params : bool
+            Boolean flag to determine whether to compute the resonance curve fitting parameters or not. Default: False.
+            If this flag is set to True or the json file does not contain any one of the fields &#34;w0&#34;, &#34;Q&#34;, &#34;C0_C&#34; and &#34;I0_r&#34;, the resonance curve fiting parameters are automatically computed.
+        respath : path
+            Path to the resonance curve file corresponding to the approach curve data. 
+            Only required if eval_res_params == True.
+        eval_phas_offset : bool
+            Boolean flag to determine whether to compute the electric phase offset Pe0 or not. Default: False.
+            If this flag is set to True or the json file does not contain the field &#34;phas_offset&#34;, Pe0 is automatically computed.
+        &#34;&#34;&#34;
+        self.filepath = jsonpath
+
+        with open(jsonpath) as json_file:
+            self.json_data = json.load(json_file)
+        
+        self.f = self.json_data[&#39;w&#39;] # driving frequency
+        self.z = np.array(self.json_data[&#39;z&#39;])
+
+        # Retrieve resonance curve parameters
+        if not all(param in self.json_data.keys() for param in [&#39;w0&#39;, &#39;Q&#39;, &#39;C0_C&#39;, &#39;I0_r&#39;]) or eval_res_params:
+            self.res_params = self._CalcResParams()
+        else:
+            self.res_params = {&#39;f0&#39;: self.json_data[&#39;w0&#39;], &#39;Q&#39;: self.json_data[&#39;Q&#39;], &#39;C0_C&#39; : self.json_data[&#39;C0_C&#39;], &#39;I0_raw&#39;: self.json_data[&#39;I0_r&#39;]}
+
+        # Calculate electric amplitude and phase
+        if &#39;phas_offset&#39; not in self.json_data.keys() or eval_phas_offset:
+            Pe0 = self._CalcPhaseOffset()
+        else:
+            Pe0 = self.json_data[&#39;phas_offset&#39;]
+        self.Pe = self._CalcElecPhase(Pe0)
+        self.Ae = self._CalcElecAmp()
+
+        # Calculate mechanical amplitude and phase
+        self.Am, self.Pm, self.A0 = self._CalcMechAmpPhas()
+        
+    def _CalcResParams(self):
+        return 0
+    
+    def _CalcPhaseOffset(self):
+        return 0
+
+    def _CalcElecPhase(self, Pe0):
+        &#34;&#34;&#34;
+        Converts the raw phase data Pr[V_lockin] to the electrical phase data Pe[rad]. 
+        The conversion formula is: Pe = Pr * pi/10 + Pe0, where Pe0 is the electrical phase offset.
+        
+        Parameters
+        ----------
+        Pe0 : float
+            Electrical phase offset, calculated according to M. Lee et al, App. Phys. Lett. 91, 023117(2007).
+        
+        Returns
+        -------
+        Pe : numpy 1D array
+            Electrical phase data in [rad].
+        &#34;&#34;&#34;
+        Pr = np.array(self.json_data[&#39;phas_r&#39;])
+        Pe = Pr*np.pi/10 + Pe0
+
+        return Pe
+
+    def _CalcElecAmp(self):
+        &#34;&#34;&#34;
+        Converts the raw amplitude data Ar[V_lockin] to the electrical amplitude data Ae[A].
+        The conversion is done as the following:
+        1) Ar : ( -10[V_lockin], 10[V_lockin] ) -&gt; ( -SEN[V], SEN[V] ), where SEN[V] is the lock in amplifier sensitivity.
+        2) ( -SEN[V], SEN[V] ) -&gt; Ae : (-SEN[V] * IVgain[A/V], SEN[V] * IVgain[A/V]), where IVgain[A/V] is the gain of the AFM amplifier circuit.
+        
+        Returns
+        -------
+        Ae : numpy 1D array
+            Electric amplitude data in [A].
+        &#34;&#34;&#34;
+        SEN = self.json_data[&#39;sens&#39;]
+        IVgain = self.json_data[&#39;IVgain&#39;]
+
+        Ar = np.array(self.json_data[&#39;amp_r&#39;])
+        Ae = (Ar/10)*SEN/IVgain
+
+        return Ae
+
+    def _CalcMechAmpPhas(self):
+        # Convert I0_raw[V] into I0[A]
+        SEN = self.json_data[&#39;sens&#39;]
+        IVgain = self.json_data[&#39;IVgain&#39;]
+        I0 = (self.res_params[&#39;I0_raw&#39;]/10)*SEN/IVgain
+        
+        # See M. Lee et al, App. Phys. Lett. 91, 023117(2007)
+        wC0V0 = (self.res_params[&#39;C0_C&#39;]*I0/self.res_params[&#39;Q&#39;])*self.f/self.res_params[&#39;f0&#39;]
+        
+        # first, calculate mechanical amplitude in (A), then convert to (m) using the piezoCf(m/A)
+        Am = np.sqrt(self.Ae**2 - 2*wC0V0*self.Ae*np.sin(self.Pe) + wC0V0**2)*self.json_data[&#39;piezoCf&#39;]
+        
+        # calculate mechanical phase in (rad)
+        Pm = np.arctan2(self.Ae*np.sin(self.Pe)-wC0V0, self.Ae*np.cos(self.Pe))
+
+        # Also calculate the free amplitude
+        A0 = I0*self.json_data[&#39;piezoCf&#39;]
+
+        return Am, Pm, A0
+
+    def __call__(self, type_ = &#39;both&#39;):
+        app_curve = ApproachCurve(type_, self.filepath, self.z, self.Am, self.Pm, self.f, self.res_params[&#39;f0&#39;], self.res_params[&#39;Q&#39;], self.A0)
+        return app_curve</code></pre>
+</details>
+</dd>
+</dl>
+</section>
+</article>
+<nav id="sidebar">
+<h1>Index</h1>
+<div class="toc">
+<ul></ul>
+</div>
+<ul id="index">
+<li><h3>Super-module</h3>
+<ul>
+<li><code><a title="cp_detection" href="index.html">cp_detection</a></code></li>
+</ul>
+</li>
+<li><h3><a href="#header-functions">Functions</a></h3>
+<ul class="">
+<li><code><a title="cp_detection.FileParse.FileParser" href="#cp_detection.FileParse.FileParser">FileParser</a></code></li>
+</ul>
+</li>
+<li><h3><a href="#header-classes">Classes</a></h3>
+<ul>
+<li>
+<h4><code><a title="cp_detection.FileParse.Json2App" href="#cp_detection.FileParse.Json2App">Json2App</a></code></h4>
+</li>
+</ul>
+</li>
+</ul>
+</nav>
+</main>
+<footer id="footer">
+<p>Generated by <a href="https://pdoc3.github.io/pdoc"><cite>pdoc</cite> 0.7.2</a>.</p>
+</footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+<script>hljs.initHighlightingOnLoad()</script>
+</body>
+</html>

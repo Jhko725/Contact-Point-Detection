@@ -1,0 +1,574 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
+<meta name="generator" content="pdoc 0.7.2" />
+<title>cp_detection.ApproachCurve API documentation</title>
+<meta name="description" content="" />
+<link href='https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.0/normalize.min.css' rel='stylesheet'>
+<link href='https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/8.0.0/sanitize.min.css' rel='stylesheet'>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css" rel="stylesheet">
+<style>.flex{display:flex !important}body{line-height:1.5em}#content{padding:20px}#sidebar{padding:30px;overflow:hidden}.http-server-breadcrumbs{font-size:130%;margin:0 0 15px 0}#footer{font-size:.75em;padding:5px 30px;border-top:1px solid #ddd;text-align:right}#footer p{margin:0 0 0 1em;display:inline-block}#footer p:last-child{margin-right:30px}h1,h2,h3,h4,h5{font-weight:300}h1{font-size:2.5em;line-height:1.1em}h2{font-size:1.75em;margin:1em 0 .50em 0}h3{font-size:1.4em;margin:25px 0 10px 0}h4{margin:0;font-size:105%}a{color:#058;text-decoration:none;transition:color .3s ease-in-out}a:hover{color:#e82}.title code{font-weight:bold}h2[id^="header-"]{margin-top:2em}.ident{color:#900}pre code{background:#f8f8f8;font-size:.8em;line-height:1.4em}code{background:#f2f2f1;padding:1px 4px;overflow-wrap:break-word}h1 code{background:transparent}pre{background:#f8f8f8;border:0;border-top:1px solid #ccc;border-bottom:1px solid #ccc;margin:1em 0;padding:1ex}#http-server-module-list{display:flex;flex-flow:column}#http-server-module-list div{display:flex}#http-server-module-list dt{min-width:10%}#http-server-module-list p{margin-top:0}.toc ul,#index{list-style-type:none;margin:0;padding:0}#index code{background:transparent}#index h3{border-bottom:1px solid #ddd}#index ul{padding:0}#index h4{font-weight:bold}#index h4 + ul{margin-bottom:.6em}@media (min-width:200ex){#index .two-column{column-count:2}}@media (min-width:300ex){#index .two-column{column-count:3}}dl{margin-bottom:2em}dl dl:last-child{margin-bottom:4em}dd{margin:0 0 1em 3em}#header-classes + dl > dd{margin-bottom:3em}dd dd{margin-left:2em}dd p{margin:10px 0}.name{background:#eee;font-weight:bold;font-size:.85em;padding:5px 10px;display:inline-block;min-width:40%}.name:hover{background:#e0e0e0}.name > span:first-child{white-space:nowrap}.name.class > span:nth-child(2){margin-left:.4em}.inherited{color:#999;border-left:5px solid #eee;padding-left:1em}.inheritance em{font-style:normal;font-weight:bold}.desc h2{font-weight:400;font-size:1.25em}.desc h3{font-size:1em}.desc dt code{background:inherit}.source summary,.git-link-div{color:#666;text-align:right;font-weight:400;font-size:.8em;text-transform:uppercase}.source summary > *{white-space:nowrap;cursor:pointer}.git-link{color:inherit;margin-left:1em}.source pre{max-height:500px;overflow:auto;margin:0}.source pre code{font-size:12px;overflow:visible}.hlist{list-style:none}.hlist li{display:inline}.hlist li:after{content:',\2002'}.hlist li:last-child:after{content:none}.hlist .hlist{display:inline;padding-left:1em}img{max-width:100%}.admonition{padding:.1em .5em;margin-bottom:1em}.admonition-title{font-weight:bold}.admonition.note,.admonition.info,.admonition.important{background:#aef}.admonition.todo,.admonition.versionadded,.admonition.tip,.admonition.hint{background:#dfd}.admonition.warning,.admonition.versionchanged,.admonition.deprecated{background:#fd4}.admonition.error,.admonition.danger,.admonition.caution{background:lightpink}</style>
+<style media="screen and (min-width: 700px)">@media screen and (min-width:700px){#sidebar{width:30%}#content{width:70%;max-width:100ch;padding:3em 4em;border-left:1px solid #ddd}pre code{font-size:1em}.item .name{font-size:1em}main{display:flex;flex-direction:row-reverse;justify-content:flex-end}.toc ul ul,#index ul{padding-left:1.5em}.toc > ul > li{margin-top:.5em}}</style>
+<style media="print">@media print{#sidebar h1{page-break-before:always}.source{display:none}}@media print{*{background:transparent !important;color:#000 !important;box-shadow:none !important;text-shadow:none !important}a[href]:after{content:" (" attr(href) ")";font-size:90%}a[href][title]:after{content:none}abbr[title]:after{content:" (" attr(title) ")"}.ir a:after,a[href^="javascript:"]:after,a[href^="#"]:after{content:""}pre,blockquote{border:1px solid #999;page-break-inside:avoid}thead{display:table-header-group}tr,img{page-break-inside:avoid}img{max-width:100% !important}@page{margin:0.5cm}p,h2,h3{orphans:3;widows:3}h1,h2,h3,h4,h5,h6{page-break-after:avoid}}</style>
+</head>
+<body>
+<main>
+<article id="content">
+<header>
+<h1 class="title">Module <code>cp_detection.ApproachCurve</code></h1>
+</header>
+<section id="section-intro">
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+class ApproachCurve():
+
+    def __init__(self, type_, filepath, z, A, P, f, f0, Q, A0):
+        &#34;&#34;&#34;
+        A class to store the approach curve data in. 
+        The amplitude (A) and phase (P) are by default mechanical amplitude and phase in units of [m] and [rad].
+        
+        ...
+
+        Attributes
+        ----------
+        type_ : &#34;app&#34;, &#34;ret&#34;, or &#34;both&#34;
+            Type of the approach curve. &#34;app&#34; stands for approach curve, &#34;ret&#34; for retraction curve and &#34;both&#34; for both.
+            In the case of &#34;both&#34;, it is assumed that the approach curve is followed by the retraction curve.         
+        filepath : path
+            Path where the original data file is stored at. For proxy data with no such file, assign None.
+        z : numpy 1D array
+            z data of the approach curve in [m].
+        A : numpy 1D array
+            Mechanical amplitude data of the approach curve in [m].
+        P : numpy 1D array
+            Mechanical phase data of the approach curve in [rad].
+        f : float
+            Driving frequency in [Hz].
+        f0 : float
+            Resonance frequency in [Hz].
+        Q : float
+            Q-factor of the resonance curve.
+        A0 : float
+            Mechanical free amplitude in [m].
+
+        Methods
+        -------
+        __len__()
+            Returns the length of the approach curve data.
+        __repr__()
+            Representation for the ApproachCurve object.
+        __eq__(other)
+            Comparison between two ApproachCurve objects. True if both objects are created from the same raw data file.
+        app()
+            Returns the approach part of a given approach curve. Raises AssertionError if called on a retraction-only curve.
+        ret()
+            Returns the retraction part of a given approach curve. Raises AssertionError if called on a approach-only curve.
+        PlotData(figsize, fontsize)
+            Plots the amplitude and phase of the given approach using the matplotlib library.
+        &#34;&#34;&#34;
+        assert type_ in {&#39;app&#39;, &#39;ret&#39;, &#39;both&#39;}, &#39;&#39;&#39;type_ parameter must be &#39;app&#39;, &#39;ret&#39;, or &#39;both&#39;.&#39;&#39;&#39;
+        self.type_ = type_
+        
+        self.filepath = filepath
+
+        # Force z, A, P to be contiguous 1d arrays and f, f0, Q, A0 to be float.
+        self.z = np.ravel(z)
+        self.A = np.ravel(A)
+        self.P = np.ravel(P)
+        self.f = float(f)
+        self.f0 = float(f0)
+        self.Q = float(Q)
+        self.A0 = float(A0)
+
+    def __len__(self):
+        &#34;&#34;&#34;
+        Returns the length of the approach curve data.
+        &#34;&#34;&#34;
+        return len(self.z)
+
+    def __repr__(self):
+        &#34;&#34;&#34;
+        Representation for the ApproachCurve object. 
+        Without __str__ implemented, this function is called upon print(ApproachCurve instance)
+        &#34;&#34;&#34;
+        type_description = {&#39;both&#39;: &#39;full approach curve&#39;, &#39;app&#39;: &#39;approach-only&#39;, &#39;ret&#39;: &#39;retraction-only&#39;}
+        return &#39;An {} data with parameters f = {:8.2f}Hz, f0 = {:8.2f}Hz, Q = {:8.2f}, and A0 = {:8.2e}nm \nRaw data file is at {}&#39;.format(type_description[self.type_], self.f, self.f0, self.Q, self.A0*1e9, self.filepath)
+
+    def __eq__(self, other):
+        &#34;&#34;&#34;
+        Comparison between two ApproachCurve objects. True if both objects are created from the same raw data file.
+        &#34;&#34;&#34;
+        return self.filepath == other.filepath
+
+    def app(self):
+        &#34;&#34;&#34;
+        Returns the approach part of a given approach curve. Raises AssertionError if called on a retraction-only curve.
+
+        Returns
+        -------
+        app_component : ApproachCurve instance
+            The approach part of the given approach curve.
+        &#34;&#34;&#34;
+        assert self.type_ in {&#39;app&#39;, &#39;both&#39;}, &#39;&#39;&#39;There is no approach component in a retraction-only curve.&#39;&#39;&#39;
+        
+        if self.type_ == &#39;app&#39;:
+            return self
+               
+        gnd = np.argmin(self.z) # Index corresponding to the smallest z value
+        z_app = self.z[:gnd+1]
+        A_app = self.A[:gnd+1]
+        P_app = self.P[:gnd+1]
+
+        app_component = ApproachCurve(&#34;app&#34;, self.filepath, z_app, A_app, P_app, self.f, self.f0, self.Q, self.A0)
+        return app_component
+
+    def ret(self):
+        &#34;&#34;&#34;
+        Returns the retraction part of a given approach curve. Raises AssertionError if called on a approach-only curve.
+
+        Returns
+        -------
+        ret_component : ApproachCurve instance
+            The retraction part of the given approach curve.
+        &#34;&#34;&#34;
+        assert self.type_ in {&#39;ret&#39;, &#39;both&#39;}, &#39;&#39;&#39;There is no retraction component in an approach-only curve.&#39;&#39;&#39;
+        
+        if self.type_ == &#39;ret&#39;:
+            return self
+        
+        gnd = np.argmin(self.z) # Index corresponding to the smallest z value
+        z_ret = self.z[gnd:]
+        A_ret = self.A[gnd:]
+        P_ret = self.P[gnd:]
+
+        ret_component = ApproachCurve(&#34;ret&#34;, self.filepath, z_ret, A_ret, P_ret, self.f, self.f0, self.Q, self.A0)
+        return ret_component
+
+    def PlotData(self, figsize = (7, 5), fontsize = 14):
+        &#34;&#34;&#34;
+        Plots the amplitude and phase of the given approach in the given matplotlib ax object.
+
+        Parameters
+        ----------
+        figsize : tuple of the form (row, col)
+            Size of the resulting matplotlib figure.
+        fontsize : float
+            Size of the font for the text in the plot.
+
+        Returns
+        -------
+        fig : matplotlib figure object
+            Matplotlib figure corresponding to the plot.
+        axes : list of matplotlib axis object
+            List containing the matplotlib axes used in the plot. 
+            axes[0] corresponds to the z-A plot, and axes[1] corresponds to the z-P plot.
+        &#34;&#34;&#34;
+        fig, ax = plt.subplots(1, 1, figsize = figsize)
+        ax.plot(self.z, self.A, &#39;.k&#39;)
+        axx = ax.twinx()
+        axx.plot(self.z, self.P, &#39;.r&#39;)
+        ax.grid(ls = &#39;--&#39;)
+
+        ax.set_xlabel(&#39;z (nm)&#39;, fontsize = fontsize)
+        ax.set_ylabel(&#39;Amplitude (nm)&#39;, fontsize = fontsize)
+        axx.set_ylabel(&#39;Phase (rad)&#39;, fontsize = fontsize)
+        
+        axes = [ax, axx]
+
+        return fig, axes
+    </code></pre>
+</details>
+</section>
+<section>
+</section>
+<section>
+</section>
+<section>
+</section>
+<section>
+<h2 class="section-title" id="header-classes">Classes</h2>
+<dl>
+<dt id="cp_detection.ApproachCurve.ApproachCurve"><code class="flex name class">
+<span>class <span class="ident">ApproachCurve</span></span>
+<span>(</span><span>type_, filepath, z, A, P, f, f0, Q, A0)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>A class to store the approach curve data in.
+The amplitude (A) and phase (P) are by default mechanical amplitude and phase in units of [m] and [rad].</p>
+<p>&hellip;</p>
+<h2 id="attributes">Attributes</h2>
+<dl>
+<dt><strong><code>type_</code></strong> :&ensp;<code>"app"</code>, <code>"ret"</code>, or <code>"both"</code></dt>
+<dd>Type of the approach curve. "app" stands for approach curve, "ret" for retraction curve and "both" for both.
+In the case of "both", it is assumed that the approach curve is followed by the retraction curve.</dd>
+<dt><strong><code>filepath</code></strong> :&ensp;<code>path</code></dt>
+<dd>Path where the original data file is stored at. For proxy data with no such file, assign None.</dd>
+<dt><strong><code>z</code></strong> :&ensp;<code>numpy</code> <code>1D</code> <code>array</code></dt>
+<dd>z data of the approach curve in [m].</dd>
+<dt><strong><code>A</code></strong> :&ensp;<code>numpy</code> <code>1D</code> <code>array</code></dt>
+<dd>Mechanical amplitude data of the approach curve in [m].</dd>
+<dt><strong><code>P</code></strong> :&ensp;<code>numpy</code> <code>1D</code> <code>array</code></dt>
+<dd>Mechanical phase data of the approach curve in [rad].</dd>
+<dt><strong><code>f</code></strong> :&ensp;<code>float</code></dt>
+<dd>Driving frequency in [Hz].</dd>
+<dt><strong><code>f0</code></strong> :&ensp;<code>float</code></dt>
+<dd>Resonance frequency in [Hz].</dd>
+<dt><strong><code>Q</code></strong> :&ensp;<code>float</code></dt>
+<dd>Q-factor of the resonance curve.</dd>
+<dt><strong><code>A0</code></strong> :&ensp;<code>float</code></dt>
+<dd>Mechanical free amplitude in [m].</dd>
+</dl>
+<h2 id="methods">Methods</h2>
+<p><strong>len</strong>()
+Returns the length of the approach curve data.
+<strong>repr</strong>()
+Representation for the ApproachCurve object.
+<strong>eq</strong>(other)
+Comparison between two ApproachCurve objects. True if both objects are created from the same raw data file.
+app()
+Returns the approach part of a given approach curve. Raises AssertionError if called on a retraction-only curve.
+ret()
+Returns the retraction part of a given approach curve. Raises AssertionError if called on a approach-only curve.
+PlotData(figsize, fontsize)
+Plots the amplitude and phase of the given approach using the matplotlib library.</p></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class ApproachCurve():
+
+    def __init__(self, type_, filepath, z, A, P, f, f0, Q, A0):
+        &#34;&#34;&#34;
+        A class to store the approach curve data in. 
+        The amplitude (A) and phase (P) are by default mechanical amplitude and phase in units of [m] and [rad].
+        
+        ...
+
+        Attributes
+        ----------
+        type_ : &#34;app&#34;, &#34;ret&#34;, or &#34;both&#34;
+            Type of the approach curve. &#34;app&#34; stands for approach curve, &#34;ret&#34; for retraction curve and &#34;both&#34; for both.
+            In the case of &#34;both&#34;, it is assumed that the approach curve is followed by the retraction curve.         
+        filepath : path
+            Path where the original data file is stored at. For proxy data with no such file, assign None.
+        z : numpy 1D array
+            z data of the approach curve in [m].
+        A : numpy 1D array
+            Mechanical amplitude data of the approach curve in [m].
+        P : numpy 1D array
+            Mechanical phase data of the approach curve in [rad].
+        f : float
+            Driving frequency in [Hz].
+        f0 : float
+            Resonance frequency in [Hz].
+        Q : float
+            Q-factor of the resonance curve.
+        A0 : float
+            Mechanical free amplitude in [m].
+
+        Methods
+        -------
+        __len__()
+            Returns the length of the approach curve data.
+        __repr__()
+            Representation for the ApproachCurve object.
+        __eq__(other)
+            Comparison between two ApproachCurve objects. True if both objects are created from the same raw data file.
+        app()
+            Returns the approach part of a given approach curve. Raises AssertionError if called on a retraction-only curve.
+        ret()
+            Returns the retraction part of a given approach curve. Raises AssertionError if called on a approach-only curve.
+        PlotData(figsize, fontsize)
+            Plots the amplitude and phase of the given approach using the matplotlib library.
+        &#34;&#34;&#34;
+        assert type_ in {&#39;app&#39;, &#39;ret&#39;, &#39;both&#39;}, &#39;&#39;&#39;type_ parameter must be &#39;app&#39;, &#39;ret&#39;, or &#39;both&#39;.&#39;&#39;&#39;
+        self.type_ = type_
+        
+        self.filepath = filepath
+
+        # Force z, A, P to be contiguous 1d arrays and f, f0, Q, A0 to be float.
+        self.z = np.ravel(z)
+        self.A = np.ravel(A)
+        self.P = np.ravel(P)
+        self.f = float(f)
+        self.f0 = float(f0)
+        self.Q = float(Q)
+        self.A0 = float(A0)
+
+    def __len__(self):
+        &#34;&#34;&#34;
+        Returns the length of the approach curve data.
+        &#34;&#34;&#34;
+        return len(self.z)
+
+    def __repr__(self):
+        &#34;&#34;&#34;
+        Representation for the ApproachCurve object. 
+        Without __str__ implemented, this function is called upon print(ApproachCurve instance)
+        &#34;&#34;&#34;
+        type_description = {&#39;both&#39;: &#39;full approach curve&#39;, &#39;app&#39;: &#39;approach-only&#39;, &#39;ret&#39;: &#39;retraction-only&#39;}
+        return &#39;An {} data with parameters f = {:8.2f}Hz, f0 = {:8.2f}Hz, Q = {:8.2f}, and A0 = {:8.2e}nm \nRaw data file is at {}&#39;.format(type_description[self.type_], self.f, self.f0, self.Q, self.A0*1e9, self.filepath)
+
+    def __eq__(self, other):
+        &#34;&#34;&#34;
+        Comparison between two ApproachCurve objects. True if both objects are created from the same raw data file.
+        &#34;&#34;&#34;
+        return self.filepath == other.filepath
+
+    def app(self):
+        &#34;&#34;&#34;
+        Returns the approach part of a given approach curve. Raises AssertionError if called on a retraction-only curve.
+
+        Returns
+        -------
+        app_component : ApproachCurve instance
+            The approach part of the given approach curve.
+        &#34;&#34;&#34;
+        assert self.type_ in {&#39;app&#39;, &#39;both&#39;}, &#39;&#39;&#39;There is no approach component in a retraction-only curve.&#39;&#39;&#39;
+        
+        if self.type_ == &#39;app&#39;:
+            return self
+               
+        gnd = np.argmin(self.z) # Index corresponding to the smallest z value
+        z_app = self.z[:gnd+1]
+        A_app = self.A[:gnd+1]
+        P_app = self.P[:gnd+1]
+
+        app_component = ApproachCurve(&#34;app&#34;, self.filepath, z_app, A_app, P_app, self.f, self.f0, self.Q, self.A0)
+        return app_component
+
+    def ret(self):
+        &#34;&#34;&#34;
+        Returns the retraction part of a given approach curve. Raises AssertionError if called on a approach-only curve.
+
+        Returns
+        -------
+        ret_component : ApproachCurve instance
+            The retraction part of the given approach curve.
+        &#34;&#34;&#34;
+        assert self.type_ in {&#39;ret&#39;, &#39;both&#39;}, &#39;&#39;&#39;There is no retraction component in an approach-only curve.&#39;&#39;&#39;
+        
+        if self.type_ == &#39;ret&#39;:
+            return self
+        
+        gnd = np.argmin(self.z) # Index corresponding to the smallest z value
+        z_ret = self.z[gnd:]
+        A_ret = self.A[gnd:]
+        P_ret = self.P[gnd:]
+
+        ret_component = ApproachCurve(&#34;ret&#34;, self.filepath, z_ret, A_ret, P_ret, self.f, self.f0, self.Q, self.A0)
+        return ret_component
+
+    def PlotData(self, figsize = (7, 5), fontsize = 14):
+        &#34;&#34;&#34;
+        Plots the amplitude and phase of the given approach in the given matplotlib ax object.
+
+        Parameters
+        ----------
+        figsize : tuple of the form (row, col)
+            Size of the resulting matplotlib figure.
+        fontsize : float
+            Size of the font for the text in the plot.
+
+        Returns
+        -------
+        fig : matplotlib figure object
+            Matplotlib figure corresponding to the plot.
+        axes : list of matplotlib axis object
+            List containing the matplotlib axes used in the plot. 
+            axes[0] corresponds to the z-A plot, and axes[1] corresponds to the z-P plot.
+        &#34;&#34;&#34;
+        fig, ax = plt.subplots(1, 1, figsize = figsize)
+        ax.plot(self.z, self.A, &#39;.k&#39;)
+        axx = ax.twinx()
+        axx.plot(self.z, self.P, &#39;.r&#39;)
+        ax.grid(ls = &#39;--&#39;)
+
+        ax.set_xlabel(&#39;z (nm)&#39;, fontsize = fontsize)
+        ax.set_ylabel(&#39;Amplitude (nm)&#39;, fontsize = fontsize)
+        axx.set_ylabel(&#39;Phase (rad)&#39;, fontsize = fontsize)
+        
+        axes = [ax, axx]
+
+        return fig, axes</code></pre>
+</details>
+<h3>Methods</h3>
+<dl>
+<dt id="cp_detection.ApproachCurve.ApproachCurve.PlotData"><code class="name flex">
+<span>def <span class="ident">PlotData</span></span>(<span>self, figsize=(7, 5), fontsize=14)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Plots the amplitude and phase of the given approach in the given matplotlib ax object.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>figsize</code></strong> :&ensp;<code>tuple</code> of <code>the</code> <code>form</code> (<code>row</code>, <code>col</code>)</dt>
+<dd>Size of the resulting matplotlib figure.</dd>
+<dt><strong><code>fontsize</code></strong> :&ensp;<code>float</code></dt>
+<dd>Size of the font for the text in the plot.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>fig</code></strong> :&ensp;<code>matplotlib</code> <code>figure</code> <code>object</code></dt>
+<dd>Matplotlib figure corresponding to the plot.</dd>
+<dt><strong><code>axes</code></strong> :&ensp;<code>list</code> of <code>matplotlib</code> <code>axis</code> <code>object</code></dt>
+<dd>List containing the matplotlib axes used in the plot.
+axes[0] corresponds to the z-A plot, and axes[1] corresponds to the z-P plot.</dd>
+</dl></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def PlotData(self, figsize = (7, 5), fontsize = 14):
+    &#34;&#34;&#34;
+    Plots the amplitude and phase of the given approach in the given matplotlib ax object.
+
+    Parameters
+    ----------
+    figsize : tuple of the form (row, col)
+        Size of the resulting matplotlib figure.
+    fontsize : float
+        Size of the font for the text in the plot.
+
+    Returns
+    -------
+    fig : matplotlib figure object
+        Matplotlib figure corresponding to the plot.
+    axes : list of matplotlib axis object
+        List containing the matplotlib axes used in the plot. 
+        axes[0] corresponds to the z-A plot, and axes[1] corresponds to the z-P plot.
+    &#34;&#34;&#34;
+    fig, ax = plt.subplots(1, 1, figsize = figsize)
+    ax.plot(self.z, self.A, &#39;.k&#39;)
+    axx = ax.twinx()
+    axx.plot(self.z, self.P, &#39;.r&#39;)
+    ax.grid(ls = &#39;--&#39;)
+
+    ax.set_xlabel(&#39;z (nm)&#39;, fontsize = fontsize)
+    ax.set_ylabel(&#39;Amplitude (nm)&#39;, fontsize = fontsize)
+    axx.set_ylabel(&#39;Phase (rad)&#39;, fontsize = fontsize)
+    
+    axes = [ax, axx]
+
+    return fig, axes</code></pre>
+</details>
+</dd>
+<dt id="cp_detection.ApproachCurve.ApproachCurve.app"><code class="name flex">
+<span>def <span class="ident">app</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Returns the approach part of a given approach curve. Raises AssertionError if called on a retraction-only curve.</p>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>app_component</code></strong> :&ensp;<a title="cp_detection.ApproachCurve.ApproachCurve" href="#cp_detection.ApproachCurve.ApproachCurve"><code>ApproachCurve</code></a> <code>instance</code></dt>
+<dd>The approach part of the given approach curve.</dd>
+</dl></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def app(self):
+    &#34;&#34;&#34;
+    Returns the approach part of a given approach curve. Raises AssertionError if called on a retraction-only curve.
+
+    Returns
+    -------
+    app_component : ApproachCurve instance
+        The approach part of the given approach curve.
+    &#34;&#34;&#34;
+    assert self.type_ in {&#39;app&#39;, &#39;both&#39;}, &#39;&#39;&#39;There is no approach component in a retraction-only curve.&#39;&#39;&#39;
+    
+    if self.type_ == &#39;app&#39;:
+        return self
+           
+    gnd = np.argmin(self.z) # Index corresponding to the smallest z value
+    z_app = self.z[:gnd+1]
+    A_app = self.A[:gnd+1]
+    P_app = self.P[:gnd+1]
+
+    app_component = ApproachCurve(&#34;app&#34;, self.filepath, z_app, A_app, P_app, self.f, self.f0, self.Q, self.A0)
+    return app_component</code></pre>
+</details>
+</dd>
+<dt id="cp_detection.ApproachCurve.ApproachCurve.ret"><code class="name flex">
+<span>def <span class="ident">ret</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Returns the retraction part of a given approach curve. Raises AssertionError if called on a approach-only curve.</p>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>ret_component</code></strong> :&ensp;<a title="cp_detection.ApproachCurve.ApproachCurve" href="#cp_detection.ApproachCurve.ApproachCurve"><code>ApproachCurve</code></a> <code>instance</code></dt>
+<dd>The retraction part of the given approach curve.</dd>
+</dl></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def ret(self):
+    &#34;&#34;&#34;
+    Returns the retraction part of a given approach curve. Raises AssertionError if called on a approach-only curve.
+
+    Returns
+    -------
+    ret_component : ApproachCurve instance
+        The retraction part of the given approach curve.
+    &#34;&#34;&#34;
+    assert self.type_ in {&#39;ret&#39;, &#39;both&#39;}, &#39;&#39;&#39;There is no retraction component in an approach-only curve.&#39;&#39;&#39;
+    
+    if self.type_ == &#39;ret&#39;:
+        return self
+    
+    gnd = np.argmin(self.z) # Index corresponding to the smallest z value
+    z_ret = self.z[gnd:]
+    A_ret = self.A[gnd:]
+    P_ret = self.P[gnd:]
+
+    ret_component = ApproachCurve(&#34;ret&#34;, self.filepath, z_ret, A_ret, P_ret, self.f, self.f0, self.Q, self.A0)
+    return ret_component</code></pre>
+</details>
+</dd>
+</dl>
+</dd>
+</dl>
+</section>
+</article>
+<nav id="sidebar">
+<h1>Index</h1>
+<div class="toc">
+<ul></ul>
+</div>
+<ul id="index">
+<li><h3>Super-module</h3>
+<ul>
+<li><code><a title="cp_detection" href="index.html">cp_detection</a></code></li>
+</ul>
+</li>
+<li><h3><a href="#header-classes">Classes</a></h3>
+<ul>
+<li>
+<h4><code><a title="cp_detection.ApproachCurve.ApproachCurve" href="#cp_detection.ApproachCurve.ApproachCurve">ApproachCurve</a></code></h4>
+<ul class="">
+<li><code><a title="cp_detection.ApproachCurve.ApproachCurve.PlotData" href="#cp_detection.ApproachCurve.ApproachCurve.PlotData">PlotData</a></code></li>
+<li><code><a title="cp_detection.ApproachCurve.ApproachCurve.app" href="#cp_detection.ApproachCurve.ApproachCurve.app">app</a></code></li>
+<li><code><a title="cp_detection.ApproachCurve.ApproachCurve.ret" href="#cp_detection.ApproachCurve.ApproachCurve.ret">ret</a></code></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</nav>
+</main>
+<footer id="footer">
+<p>Generated by <a href="https://pdoc3.github.io/pdoc"><cite>pdoc</cite> 0.7.2</a>.</p>
+</footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+<script>hljs.initHighlightingOnLoad()</script>
+</body>
+</html>
