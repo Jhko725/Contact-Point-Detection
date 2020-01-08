@@ -25,55 +25,56 @@
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 
 class ApproachCurve():
-
-    def __init__(self, type_, filepath, z, A, P, f, f0, Q, A0):
-        &#34;&#34;&#34;
-        A class to store the approach curve data in. 
-        The amplitude (A) and phase (P) are by default mechanical amplitude and phase in units of [m] and [rad].
+    &#34;&#34;&#34;
+    A class to store the approach curve data in. 
+    The amplitude (A) and phase (P) are by default mechanical amplitude and phase in units of [m] and [rad].
         
-        ...
+    ...
 
-        Attributes
-        ----------
-        type_ : &#34;app&#34;, &#34;ret&#34;, or &#34;both&#34;
-            Type of the approach curve. &#34;app&#34; stands for approach curve, &#34;ret&#34; for retraction curve and &#34;both&#34; for both.
-            In the case of &#34;both&#34;, it is assumed that the approach curve is followed by the retraction curve.         
-        filepath : path
-            Path where the original data file is stored at. For proxy data with no such file, assign None.
-        z : numpy 1D array
-            z data of the approach curve in [m].
-        A : numpy 1D array
-            Mechanical amplitude data of the approach curve in [m].
-        P : numpy 1D array
-            Mechanical phase data of the approach curve in [rad].
-        f : float
-            Driving frequency in [Hz].
-        f0 : float
-            Resonance frequency in [Hz].
-        Q : float
-            Q-factor of the resonance curve.
-        A0 : float
-            Mechanical free amplitude in [m].
+    Attributes
+    ----------
+    type_ : &#34;app&#34;, &#34;ret&#34;, or &#34;both&#34;
+        Type of the approach curve. &#34;app&#34; stands for approach curve, &#34;ret&#34; for retraction curve and &#34;both&#34; for both.
+        In the case of &#34;both&#34;, it is assumed that the approach curve is followed by the retraction curve.         
+    filepath : path
+        Path where the original data file is stored at. For proxy data with no such file, assign None.
+    z : numpy 1D array
+        z data of the approach curve in [m].
+    A : numpy 1D array
+        Mechanical amplitude data of the approach curve in [m].
+    P : numpy 1D array
+        Mechanical phase data of the approach curve in [rad].
+    f : float
+        Driving frequency in [Hz].
+    f0 : float
+        Resonance frequency in [Hz].
+    Q : float
+        Q-factor of the resonance curve.
+    A0 : float
+        Mechanical free amplitude in [m].
 
-        Methods
-        -------
-        __len__()
-            Returns the length of the approach curve data.
-        __repr__()
-            Representation for the ApproachCurve object.
-        __eq__(other)
-            Comparison between two ApproachCurve objects. True if both objects are created from the same raw data file.
-        app()
-            Returns the approach part of a given approach curve. Raises AssertionError if called on a retraction-only curve.
-        ret()
-            Returns the retraction part of a given approach curve. Raises AssertionError if called on a approach-only curve.
-        PlotData(figsize, fontsize)
-            Plots the amplitude and phase of the given approach using the matplotlib library.
-        &#34;&#34;&#34;
+    Methods
+    -------
+    __len__()
+        Returns the length of the approach curve data.  
+    __repr__()
+        Representation for the ApproachCurve object.
+    __eq__(other)
+        Comparison between two ApproachCurve objects. True if both objects are created from the same raw data file.
+    app()
+        Returns the approach part of a given approach curve. Raises AssertionError if called on a retraction-only curve.
+    ret()
+        Returns the retraction part of a given approach curve. Raises AssertionError if called on a approach-only curve.
+    SortData(inc)
+        Sorts the approach curve data (z, A, P) to increasing/decreasing z order for inc = True/False.
+    PlotData(figsize, fontsize)
+        Plots the amplitude and phase of the given approach using the matplotlib library.
+    &#34;&#34;&#34;    
+    def __init__(self, type_, filepath, z, A, P, f, f0, Q, A0):
+        
         assert type_ in {&#39;app&#39;, &#39;ret&#39;, &#39;both&#39;}, &#39;&#39;&#39;type_ parameter must be &#39;app&#39;, &#39;ret&#39;, or &#39;both&#39;.&#39;&#39;&#39;
         self.type_ = type_
         
@@ -117,7 +118,7 @@ class ApproachCurve():
         app_component : ApproachCurve instance
             The approach part of the given approach curve.
         &#34;&#34;&#34;
-        assert self.type_ in {&#39;app&#39;, &#39;both&#39;}, &#39;&#39;&#39;There is no approach component in a retraction-only curve.&#39;&#39;&#39;
+        assert self.type_ != &#39;ret&#39;, &#39;&#39;&#39;There is no approach component in a retraction-only curve.&#39;&#39;&#39;
         
         if self.type_ == &#39;app&#39;:
             return self
@@ -139,7 +140,7 @@ class ApproachCurve():
         ret_component : ApproachCurve instance
             The retraction part of the given approach curve.
         &#34;&#34;&#34;
-        assert self.type_ in {&#39;ret&#39;, &#39;both&#39;}, &#39;&#39;&#39;There is no retraction component in an approach-only curve.&#39;&#39;&#39;
+        assert self.type_ != &#39;app&#39;, &#39;&#39;&#39;There is no retraction component in an approach-only curve.&#39;&#39;&#39;
         
         if self.type_ == &#39;ret&#39;:
             return self
@@ -151,6 +152,28 @@ class ApproachCurve():
 
         ret_component = ApproachCurve(&#34;ret&#34;, self.filepath, z_ret, A_ret, P_ret, self.f, self.f0, self.Q, self.A0)
         return ret_component
+
+    def SortData(self, inc = True):
+        &#34;&#34;&#34;
+        Sorts the approach curve data (z, A, P) to increasing/decreasing z order for inc = True/False.
+        The returned z, A, P are kept contiguous.
+        This function makes sense only for type_ = &#34;app&#34; or &#34;ret&#34;.
+
+        Parameters
+        ----------
+        inc : bool
+            If True, the data is sorted in increasing z order.  When False, otherwise.
+        &#34;&#34;&#34;
+        # Raise AssertionError if self.type_ == &#34;both&#34;
+        assert self.type_ != &#39;both&#39;, &#39;It is impossible to monotonically sort z for a full approach curve. Use app() or ret(), then try again.&#39;
+        
+        # Determine whether the current data is sorted in increasing order or not
+        increasing_order = True if np.argmin(self.z) == 0 else False
+
+        if inc != increasing_order:
+            self.z = np.ascontiguousarray(np.flip(self.z))
+            self.A = np.ascontiguousarray(np.flip(self.A))
+            self.P = np.ascontiguousarray(np.flip(self.P))
 
     def PlotData(self, figsize = (7, 5), fontsize = 14):
         &#34;&#34;&#34;
@@ -228,7 +251,7 @@ In the case of "both", it is assumed that the approach curve is followed by the 
 </dl>
 <h2 id="methods">Methods</h2>
 <p><strong>len</strong>()
-Returns the length of the approach curve data.
+Returns the length of the approach curve data.<br>
 <strong>repr</strong>()
 Representation for the ApproachCurve object.
 <strong>eq</strong>(other)
@@ -237,6 +260,8 @@ app()
 Returns the approach part of a given approach curve. Raises AssertionError if called on a retraction-only curve.
 ret()
 Returns the retraction part of a given approach curve. Raises AssertionError if called on a approach-only curve.
+SortData(inc)
+Sorts the approach curve data (z, A, P) to increasing/decreasing z order for inc = True/False.
 PlotData(figsize, fontsize)
 Plots the amplitude and phase of the given approach using the matplotlib library.</p></section>
 <details class="source">
@@ -244,51 +269,53 @@ Plots the amplitude and phase of the given approach using the matplotlib library
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class ApproachCurve():
-
-    def __init__(self, type_, filepath, z, A, P, f, f0, Q, A0):
-        &#34;&#34;&#34;
-        A class to store the approach curve data in. 
-        The amplitude (A) and phase (P) are by default mechanical amplitude and phase in units of [m] and [rad].
+    &#34;&#34;&#34;
+    A class to store the approach curve data in. 
+    The amplitude (A) and phase (P) are by default mechanical amplitude and phase in units of [m] and [rad].
         
-        ...
+    ...
 
-        Attributes
-        ----------
-        type_ : &#34;app&#34;, &#34;ret&#34;, or &#34;both&#34;
-            Type of the approach curve. &#34;app&#34; stands for approach curve, &#34;ret&#34; for retraction curve and &#34;both&#34; for both.
-            In the case of &#34;both&#34;, it is assumed that the approach curve is followed by the retraction curve.         
-        filepath : path
-            Path where the original data file is stored at. For proxy data with no such file, assign None.
-        z : numpy 1D array
-            z data of the approach curve in [m].
-        A : numpy 1D array
-            Mechanical amplitude data of the approach curve in [m].
-        P : numpy 1D array
-            Mechanical phase data of the approach curve in [rad].
-        f : float
-            Driving frequency in [Hz].
-        f0 : float
-            Resonance frequency in [Hz].
-        Q : float
-            Q-factor of the resonance curve.
-        A0 : float
-            Mechanical free amplitude in [m].
+    Attributes
+    ----------
+    type_ : &#34;app&#34;, &#34;ret&#34;, or &#34;both&#34;
+        Type of the approach curve. &#34;app&#34; stands for approach curve, &#34;ret&#34; for retraction curve and &#34;both&#34; for both.
+        In the case of &#34;both&#34;, it is assumed that the approach curve is followed by the retraction curve.         
+    filepath : path
+        Path where the original data file is stored at. For proxy data with no such file, assign None.
+    z : numpy 1D array
+        z data of the approach curve in [m].
+    A : numpy 1D array
+        Mechanical amplitude data of the approach curve in [m].
+    P : numpy 1D array
+        Mechanical phase data of the approach curve in [rad].
+    f : float
+        Driving frequency in [Hz].
+    f0 : float
+        Resonance frequency in [Hz].
+    Q : float
+        Q-factor of the resonance curve.
+    A0 : float
+        Mechanical free amplitude in [m].
 
-        Methods
-        -------
-        __len__()
-            Returns the length of the approach curve data.
-        __repr__()
-            Representation for the ApproachCurve object.
-        __eq__(other)
-            Comparison between two ApproachCurve objects. True if both objects are created from the same raw data file.
-        app()
-            Returns the approach part of a given approach curve. Raises AssertionError if called on a retraction-only curve.
-        ret()
-            Returns the retraction part of a given approach curve. Raises AssertionError if called on a approach-only curve.
-        PlotData(figsize, fontsize)
-            Plots the amplitude and phase of the given approach using the matplotlib library.
-        &#34;&#34;&#34;
+    Methods
+    -------
+    __len__()
+        Returns the length of the approach curve data.  
+    __repr__()
+        Representation for the ApproachCurve object.
+    __eq__(other)
+        Comparison between two ApproachCurve objects. True if both objects are created from the same raw data file.
+    app()
+        Returns the approach part of a given approach curve. Raises AssertionError if called on a retraction-only curve.
+    ret()
+        Returns the retraction part of a given approach curve. Raises AssertionError if called on a approach-only curve.
+    SortData(inc)
+        Sorts the approach curve data (z, A, P) to increasing/decreasing z order for inc = True/False.
+    PlotData(figsize, fontsize)
+        Plots the amplitude and phase of the given approach using the matplotlib library.
+    &#34;&#34;&#34;    
+    def __init__(self, type_, filepath, z, A, P, f, f0, Q, A0):
+        
         assert type_ in {&#39;app&#39;, &#39;ret&#39;, &#39;both&#39;}, &#39;&#39;&#39;type_ parameter must be &#39;app&#39;, &#39;ret&#39;, or &#39;both&#39;.&#39;&#39;&#39;
         self.type_ = type_
         
@@ -332,7 +359,7 @@ Plots the amplitude and phase of the given approach using the matplotlib library
         app_component : ApproachCurve instance
             The approach part of the given approach curve.
         &#34;&#34;&#34;
-        assert self.type_ in {&#39;app&#39;, &#39;both&#39;}, &#39;&#39;&#39;There is no approach component in a retraction-only curve.&#39;&#39;&#39;
+        assert self.type_ != &#39;ret&#39;, &#39;&#39;&#39;There is no approach component in a retraction-only curve.&#39;&#39;&#39;
         
         if self.type_ == &#39;app&#39;:
             return self
@@ -354,7 +381,7 @@ Plots the amplitude and phase of the given approach using the matplotlib library
         ret_component : ApproachCurve instance
             The retraction part of the given approach curve.
         &#34;&#34;&#34;
-        assert self.type_ in {&#39;ret&#39;, &#39;both&#39;}, &#39;&#39;&#39;There is no retraction component in an approach-only curve.&#39;&#39;&#39;
+        assert self.type_ != &#39;app&#39;, &#39;&#39;&#39;There is no retraction component in an approach-only curve.&#39;&#39;&#39;
         
         if self.type_ == &#39;ret&#39;:
             return self
@@ -366,6 +393,28 @@ Plots the amplitude and phase of the given approach using the matplotlib library
 
         ret_component = ApproachCurve(&#34;ret&#34;, self.filepath, z_ret, A_ret, P_ret, self.f, self.f0, self.Q, self.A0)
         return ret_component
+
+    def SortData(self, inc = True):
+        &#34;&#34;&#34;
+        Sorts the approach curve data (z, A, P) to increasing/decreasing z order for inc = True/False.
+        The returned z, A, P are kept contiguous.
+        This function makes sense only for type_ = &#34;app&#34; or &#34;ret&#34;.
+
+        Parameters
+        ----------
+        inc : bool
+            If True, the data is sorted in increasing z order.  When False, otherwise.
+        &#34;&#34;&#34;
+        # Raise AssertionError if self.type_ == &#34;both&#34;
+        assert self.type_ != &#39;both&#39;, &#39;It is impossible to monotonically sort z for a full approach curve. Use app() or ret(), then try again.&#39;
+        
+        # Determine whether the current data is sorted in increasing order or not
+        increasing_order = True if np.argmin(self.z) == 0 else False
+
+        if inc != increasing_order:
+            self.z = np.ascontiguousarray(np.flip(self.z))
+            self.A = np.ascontiguousarray(np.flip(self.A))
+            self.P = np.ascontiguousarray(np.flip(self.P))
 
     def PlotData(self, figsize = (7, 5), fontsize = 14):
         &#34;&#34;&#34;
@@ -460,6 +509,46 @@ axes[0] corresponds to the z-A plot, and axes[1] corresponds to the z-P plot.</d
     return fig, axes</code></pre>
 </details>
 </dd>
+<dt id="cp_detection.ApproachCurve.ApproachCurve.SortData"><code class="name flex">
+<span>def <span class="ident">SortData</span></span>(<span>self, inc=True)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Sorts the approach curve data (z, A, P) to increasing/decreasing z order for inc = True/False.
+The returned z, A, P are kept contiguous.
+This function makes sense only for type_ = "app" or "ret".</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>inc</code></strong> :&ensp;<code>bool</code></dt>
+<dd>If True, the data is sorted in increasing z order.
+When False, otherwise.</dd>
+</dl></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def SortData(self, inc = True):
+    &#34;&#34;&#34;
+    Sorts the approach curve data (z, A, P) to increasing/decreasing z order for inc = True/False.
+    The returned z, A, P are kept contiguous.
+    This function makes sense only for type_ = &#34;app&#34; or &#34;ret&#34;.
+
+    Parameters
+    ----------
+    inc : bool
+        If True, the data is sorted in increasing z order.  When False, otherwise.
+    &#34;&#34;&#34;
+    # Raise AssertionError if self.type_ == &#34;both&#34;
+    assert self.type_ != &#39;both&#39;, &#39;It is impossible to monotonically sort z for a full approach curve. Use app() or ret(), then try again.&#39;
+    
+    # Determine whether the current data is sorted in increasing order or not
+    increasing_order = True if np.argmin(self.z) == 0 else False
+
+    if inc != increasing_order:
+        self.z = np.ascontiguousarray(np.flip(self.z))
+        self.A = np.ascontiguousarray(np.flip(self.A))
+        self.P = np.ascontiguousarray(np.flip(self.P))</code></pre>
+</details>
+</dd>
 <dt id="cp_detection.ApproachCurve.ApproachCurve.app"><code class="name flex">
 <span>def <span class="ident">app</span></span>(<span>self)</span>
 </code></dt>
@@ -483,7 +572,7 @@ axes[0] corresponds to the z-A plot, and axes[1] corresponds to the z-P plot.</d
     app_component : ApproachCurve instance
         The approach part of the given approach curve.
     &#34;&#34;&#34;
-    assert self.type_ in {&#39;app&#39;, &#39;both&#39;}, &#39;&#39;&#39;There is no approach component in a retraction-only curve.&#39;&#39;&#39;
+    assert self.type_ != &#39;ret&#39;, &#39;&#39;&#39;There is no approach component in a retraction-only curve.&#39;&#39;&#39;
     
     if self.type_ == &#39;app&#39;:
         return self
@@ -520,7 +609,7 @@ axes[0] corresponds to the z-A plot, and axes[1] corresponds to the z-P plot.</d
     ret_component : ApproachCurve instance
         The retraction part of the given approach curve.
     &#34;&#34;&#34;
-    assert self.type_ in {&#39;ret&#39;, &#39;both&#39;}, &#39;&#39;&#39;There is no retraction component in an approach-only curve.&#39;&#39;&#39;
+    assert self.type_ != &#39;app&#39;, &#39;&#39;&#39;There is no retraction component in an approach-only curve.&#39;&#39;&#39;
     
     if self.type_ == &#39;ret&#39;:
         return self
@@ -556,6 +645,7 @@ axes[0] corresponds to the z-A plot, and axes[1] corresponds to the z-P plot.</d
 <h4><code><a title="cp_detection.ApproachCurve.ApproachCurve" href="#cp_detection.ApproachCurve.ApproachCurve">ApproachCurve</a></code></h4>
 <ul class="">
 <li><code><a title="cp_detection.ApproachCurve.ApproachCurve.PlotData" href="#cp_detection.ApproachCurve.ApproachCurve.PlotData">PlotData</a></code></li>
+<li><code><a title="cp_detection.ApproachCurve.ApproachCurve.SortData" href="#cp_detection.ApproachCurve.ApproachCurve.SortData">SortData</a></code></li>
 <li><code><a title="cp_detection.ApproachCurve.ApproachCurve.app" href="#cp_detection.ApproachCurve.ApproachCurve.app">app</a></code></li>
 <li><code><a title="cp_detection.ApproachCurve.ApproachCurve.ret" href="#cp_detection.ApproachCurve.ApproachCurve.ret">ret</a></code></li>
 </ul>

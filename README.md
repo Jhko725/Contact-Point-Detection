@@ -61,8 +61,10 @@ Give an example
 
 ## Authors
 
-* **Joon-Hyuk Ko** - *Initial work* - [PurpleBooth](https://github.com/PurpleBooth)
+* **Joon-Hyuk Ko** 
 * **Sung Hoon Kim**
+* **Jhe Lab**
+
 See also the list of [contributors](https://github.com/your/project/contributors) who participated in this project.
 
 ## License
