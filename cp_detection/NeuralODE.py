@@ -1,8 +1,45 @@
 from __future__ import print_function, division
+import numpy as np
 import torch
 import torch.nn as nn
-import pytorch_lightning as pl
 from torch.utils.data import Dataset, DataLoader
+import pytorch_lightning as pl
+from torchdiffeq import odeint_adjoint as odeint
+
+class GeneralModeDataset(Dataset):
+    """
+    A PyTorch Dataset to handle general mode AFM data. 
+    """
+
+    def __init__(self, t, d_list, x0_list, z_list, ode_params):
+        """
+        Parameters
+        ----------
+        t : 1D Numpy array 
+            1D Numpy array containing the time stamps corresponding to the ODE solution x(t)
+        ode_params : dict
+            Dictionary containing the necessary parameters for the ODE. 
+            Required form is ode_params = {'A0' : float, 'Q' : float, 'Om' : float, 'k' : float}
+        """
+        # Needs modifying - in the final form, we do not necessarily need x0 in both the model and the dataset
+        self.t = np.array(t)
+        self.d_list = d_list
+        self.x0_list = x0_list
+        self.z_list = z_list
+        self.ode_params = ode_params
+
+    def __len__(self):
+        return len(self.d_list)
+
+    def __getitem__(self, idx):
+        sample = {'time': self.t, 'd': self.d_list[idx], 'x0': self.x0_list[idx], 'z': self.z_list[idx][:]}
+        return sample
+
+    def __eq__(self, other):
+        """
+        Comparison between two GeneralModeDataset objects. True if both objects have the same ODE parameters.
+        """
+        return self.ode_params == other.ode_params
 
 class F_cons(nn.Module):
     """
@@ -72,12 +109,11 @@ class F_cons(nn.Module):
         F = self.tanh(interm)
         return F
 
-class AFM_NeuralODE(pl.LightningModule):
+class AFM_NeuralODE(nn.Module):
     """
-    A PyTorch-Lightning LightningModule for creating and training a NeuralODE modeling the AFM tip-sample dynamics. 
+    A  Pytorch module to create a NeuralODE modeling the AFM tip-sample dynamics.
     Note that all length scales involved in the model are scaled by setting 1[nm] = 1 
     and all timescales scaled to w0*1[s] = 1.
-    ...
 
     Attributes
     ----------
@@ -97,7 +133,6 @@ class AFM_NeuralODE(pl.LightningModule):
     k : float
         Spring constant of the cantilever/QTF in units of [N/m].
 
-    
     Methods
     -------
     forward(t, x)
@@ -105,14 +140,12 @@ class AFM_NeuralODE(pl.LightningModule):
         x is a length 2 vector of the form x = [y, z], where y = dz/dt 
     """
 
-    def __init__(self, d, A0, Om, Q, k, hidden_nodes = [4]):
+    def __init__(self, A0, Om, Q, k, d = 0., hidden_nodes = [4]):
         """
         Parameters
         ----------
         hidden_nodes : list of int
             List of the nodes in each of the hidden layers of the model.
-        d : float
-            Mean tip-sample distance in units of [nm].
         A0 : float
             Free amplitude of the tip at resonance in units of [nm].
             Follows the definition outlined in M. Lee et. al., Phys. Rev. Lett. 97, 036104 (2006).
@@ -122,8 +155,9 @@ class AFM_NeuralODE(pl.LightningModule):
             Q-factor of the cantilever/QTF.
         k : float
             Spring constant of the cantilever/QTF in units of [N/m].
+        d : float
+            Mean tip-sample distance in units of [nm]. Default value is 0.
         """
-        super(AFM_NeuralODE, self).__init__()
         self.Fc = F_cons(hidden_nodes)
         self.nfe = 0
 
@@ -162,3 +196,97 @@ class AFM_NeuralODE(pl.LightningModule):
         ode = torch.matmul(self.C1, x) + (self.d + (self.A0/self.Q)*torch.cos(self.Om*t) + F/self.k) * self.C2
 
         return ode
+
+
+class LightningTrainer(pl.LightningModule):
+    """
+    A PyTorch-Lightning LightningModule for training the NeuralODE created by the class AFM_NeuralODE. 
+
+    ...
+
+    Attributes
+    ----------
+    ODE : An instance of class AFM_NeuralODE
+        A NeuralODE model to represent the dynamics between the tip and the sample.
+    train_dataset : An instance of the class GeneralModeDataset
+        A PyTorch dataset of a given general mode approach data to train the NeuralODE in. 
+    A0 : float
+        Free amplitude of the tip at resonance in units of [nm].
+        Follows the definition outlined in M. Lee et. al., Phys. Rev. Lett. 97, 036104 (2006).
+    Om : float
+        Ratio between the resonance frequency f0 and the driving frequency f. Om = f/f0
+    Q : float
+        Q-factor of the cantilever/QTF.
+    k : float
+        Spring constant of the cantilever/QTF in units of [N/m].
+    lr : float
+        Learning rate of the model. Default value is 0.01.
+    """
+
+    def __init__(self, train_dataset, lr = 0.01, hidden_nodes = [4], batch_size = 8):
+        """
+        Parameters
+        ----------
+        train_dataset : An instance of PyTorch Dataset
+            PyTorch dataset corresponding to the training data
+        hidden_nodes : list of int
+            List of the nodes in each of the hidden layers of the model.
+        lr : float
+            Learning rate of the model. Default value is 0.01.
+        """
+        super(LightningTrainer, self).__init__()
+        self.train_dataset = train_dataset
+        ode_params = self.train_dataset.ode_params
+        self.ODE = AFM_NeuralODE(**ode_params, d = 0, hidden_nodes = hidden_nodes)
+        self.batch_size = batch_size
+        self.lr = lr
+
+    def training_step(self, batch, batch_nb):
+        t = batch['time'].float()
+        z_true = batch['z'].float()
+        x0 = batch['x0'].float()
+        self.ODE.d = batch['d']
+
+        x_pred = odeint(self.ODE, x0, t, method = self.solver)
+        z_pred = x_pred[:,1]
+
+        log1pI_pred = self.LogSpectra(z_pred)
+        log1pI_true = self.LogSpectra(z_true)
+
+        loss_function = nn.MSELoss()
+        loss = loss_function(log1pI_pred, log1pI_true)
+
+        tensorboard_logs = {'train_loss': loss}
+        return {'loss': loss, 'log': tensorboard_logs}
+
+    @pl.data_loader
+    def train_dataloader(self):
+        return DataLoader(self.train_dataset, batch_size = self.batch_size, shuffle = True)
+
+    @staticmethod
+    def LogSpectra(z):
+        """
+        Calculates the complex FFT spectra of the given signal z(t), then calculates the intensity. Finally, returns log1p(intensity), where log1p is preferred over log due to its numerical stability.
+
+        Parameters
+        ----------
+        z : A 1D PyTorch tensor
+            1D tensor of real values, corresponding to the time series z(t)
+
+        Returns
+        -------
+        z_log1pI : A 1d Pytorch tensor
+            1D tensor corresponding to the log1p of the Fourier intensity of z(t).
+        """
+
+        z_fft = torch.rfft(z, 1)
+        z_I = torch.sum(z_fft**2, dim = -1)
+        z_log1pI = torch.log1p(z_I)
+
+        return z_log1pI
+
+    def configure_optimizers(self):
+        optim = torch.optim.Adam(self.parameters(), lr = self.lr)
+        sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, 'min', 0.5, 100, threshold = 0.05, threshold_mode = 'rel')
+        return [optim], [sched]
+
