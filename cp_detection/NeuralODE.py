@@ -5,13 +5,14 @@ import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 import pytorch_lightning as pl
 from torchdiffeq import odeint_adjoint as odeint
+import matplotlib.pyplot as plt
 
 class GeneralModeDataset(Dataset):
     """
     A PyTorch Dataset to handle general mode AFM data. 
     """
 
-    def __init__(self, t, d_list, x0_list, z_list, ode_params):
+    def __init__(self, t, d_list, x0, z_list, ode_params):
         """
         Parameters
         ----------
@@ -24,15 +25,15 @@ class GeneralModeDataset(Dataset):
         # Needs modifying - in the final form, we do not necessarily need x0 in both the model and the dataset
         self.t = np.array(t)
         self.d_list = d_list
-        self.x0_list = x0_list
         self.z_list = z_list
         self.ode_params = ode_params
+        self.x0 = x0
 
     def __len__(self):
         return len(self.d_list)
 
     def __getitem__(self, idx):
-        sample = {'time': self.t, 'd': self.d_list[idx], 'x0': self.x0_list[idx], 'z': self.z_list[idx][:]}
+        sample = {'time': self.t, 'd': self.d_list[idx], 'x0': self.x0, 'z': self.z_list[idx][:]}
         return sample
 
     def __eq__(self, other):
@@ -40,6 +41,17 @@ class GeneralModeDataset(Dataset):
         Comparison between two GeneralModeDataset objects. True if both objects have the same ODE parameters.
         """
         return self.ode_params == other.ode_params
+
+    def PlotData(self, idx, figsize = (7, 5), fontsize = 14):
+        data = self.__getitem__(idx)
+        
+        fig, ax = plt.subplots(1, 1, figsize = figsize)
+        ax.plot(data['time'], data['z'], '.k')
+        ax.grid(ls = '--')
+        ax.set_xlabel('Normalized Time', fontsize = fontsize)
+        ax.set_ylabel('z (nm)', fontsize = fontsize)
+
+        return fig, ax
 
 class F_cons(nn.Module):
     """
@@ -73,8 +85,9 @@ class F_cons(nn.Module):
         hidden_nodes : list of int
             List of the nodes in each of the hidden layers of the model
         """
+        super(F_cons, self).__init__()
         self.hidden_nodes = list(hidden_nodes)
-        self.layers = []
+        self.layers = nn.ModuleList()
         for i in range(len(self.hidden_nodes)):
             if i == 0:
                 self.layers.append(nn.Linear(1, self.hidden_nodes[i]))
@@ -158,6 +171,7 @@ class AFM_NeuralODE(nn.Module):
         d : float
             Mean tip-sample distance in units of [nm]. Default value is 0.
         """
+        super(AFM_NeuralODE, self).__init__()
         self.Fc = F_cons(hidden_nodes)
         self.nfe = 0
 
@@ -223,7 +237,7 @@ class LightningTrainer(pl.LightningModule):
         Learning rate of the model. Default value is 0.01.
     """
 
-    def __init__(self, train_dataset, lr = 0.01, hidden_nodes = [4], batch_size = 8):
+    def __init__(self, train_dataset, lr = 0.01, hidden_nodes = [4], batch_size = 1, solver = 'dopri5'):
         """
         Parameters
         ----------
@@ -240,16 +254,25 @@ class LightningTrainer(pl.LightningModule):
         self.ODE = AFM_NeuralODE(**ode_params, d = 0, hidden_nodes = hidden_nodes)
         self.batch_size = batch_size
         self.lr = lr
+        self.solver = solver
 
-    def training_step(self, batch, batch_nb):
-        t = batch['time'].float()
-        z_true = batch['z'].float()
-        x0 = batch['x0'].float()
-        self.ODE.d = batch['d']
+    def forward(self, t, x0, d):
+        self.ODE.d = d
 
         x_pred = odeint(self.ODE, x0, t, method = self.solver)
         z_pred = x_pred[:,1]
 
+        return z_pred
+
+    def training_step(self, batch, batch_nb):
+
+        t = batch['time'].float()
+        x0 = batch['x0'].float()
+        d = batch['d']
+
+        z_pred = self.forward(t, x0, d)
+        z_true = batch['z'].float()
+        
         log1pI_pred = self.LogSpectra(z_pred)
         log1pI_true = self.LogSpectra(z_true)
 
