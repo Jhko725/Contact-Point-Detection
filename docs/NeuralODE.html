@@ -1,0 +1,1134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
+<meta name="generator" content="pdoc 0.7.2" />
+<title>cp_detection.NeuralODE API documentation</title>
+<meta name="description" content="" />
+<link href='https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.0/normalize.min.css' rel='stylesheet'>
+<link href='https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/8.0.0/sanitize.min.css' rel='stylesheet'>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css" rel="stylesheet">
+<style>.flex{display:flex !important}body{line-height:1.5em}#content{padding:20px}#sidebar{padding:30px;overflow:hidden}.http-server-breadcrumbs{font-size:130%;margin:0 0 15px 0}#footer{font-size:.75em;padding:5px 30px;border-top:1px solid #ddd;text-align:right}#footer p{margin:0 0 0 1em;display:inline-block}#footer p:last-child{margin-right:30px}h1,h2,h3,h4,h5{font-weight:300}h1{font-size:2.5em;line-height:1.1em}h2{font-size:1.75em;margin:1em 0 .50em 0}h3{font-size:1.4em;margin:25px 0 10px 0}h4{margin:0;font-size:105%}a{color:#058;text-decoration:none;transition:color .3s ease-in-out}a:hover{color:#e82}.title code{font-weight:bold}h2[id^="header-"]{margin-top:2em}.ident{color:#900}pre code{background:#f8f8f8;font-size:.8em;line-height:1.4em}code{background:#f2f2f1;padding:1px 4px;overflow-wrap:break-word}h1 code{background:transparent}pre{background:#f8f8f8;border:0;border-top:1px solid #ccc;border-bottom:1px solid #ccc;margin:1em 0;padding:1ex}#http-server-module-list{display:flex;flex-flow:column}#http-server-module-list div{display:flex}#http-server-module-list dt{min-width:10%}#http-server-module-list p{margin-top:0}.toc ul,#index{list-style-type:none;margin:0;padding:0}#index code{background:transparent}#index h3{border-bottom:1px solid #ddd}#index ul{padding:0}#index h4{font-weight:bold}#index h4 + ul{margin-bottom:.6em}@media (min-width:200ex){#index .two-column{column-count:2}}@media (min-width:300ex){#index .two-column{column-count:3}}dl{margin-bottom:2em}dl dl:last-child{margin-bottom:4em}dd{margin:0 0 1em 3em}#header-classes + dl > dd{margin-bottom:3em}dd dd{margin-left:2em}dd p{margin:10px 0}.name{background:#eee;font-weight:bold;font-size:.85em;padding:5px 10px;display:inline-block;min-width:40%}.name:hover{background:#e0e0e0}.name > span:first-child{white-space:nowrap}.name.class > span:nth-child(2){margin-left:.4em}.inherited{color:#999;border-left:5px solid #eee;padding-left:1em}.inheritance em{font-style:normal;font-weight:bold}.desc h2{font-weight:400;font-size:1.25em}.desc h3{font-size:1em}.desc dt code{background:inherit}.source summary,.git-link-div{color:#666;text-align:right;font-weight:400;font-size:.8em;text-transform:uppercase}.source summary > *{white-space:nowrap;cursor:pointer}.git-link{color:inherit;margin-left:1em}.source pre{max-height:500px;overflow:auto;margin:0}.source pre code{font-size:12px;overflow:visible}.hlist{list-style:none}.hlist li{display:inline}.hlist li:after{content:',\2002'}.hlist li:last-child:after{content:none}.hlist .hlist{display:inline;padding-left:1em}img{max-width:100%}.admonition{padding:.1em .5em;margin-bottom:1em}.admonition-title{font-weight:bold}.admonition.note,.admonition.info,.admonition.important{background:#aef}.admonition.todo,.admonition.versionadded,.admonition.tip,.admonition.hint{background:#dfd}.admonition.warning,.admonition.versionchanged,.admonition.deprecated{background:#fd4}.admonition.error,.admonition.danger,.admonition.caution{background:lightpink}</style>
+<style media="screen and (min-width: 700px)">@media screen and (min-width:700px){#sidebar{width:30%}#content{width:70%;max-width:100ch;padding:3em 4em;border-left:1px solid #ddd}pre code{font-size:1em}.item .name{font-size:1em}main{display:flex;flex-direction:row-reverse;justify-content:flex-end}.toc ul ul,#index ul{padding-left:1.5em}.toc > ul > li{margin-top:.5em}}</style>
+<style media="print">@media print{#sidebar h1{page-break-before:always}.source{display:none}}@media print{*{background:transparent !important;color:#000 !important;box-shadow:none !important;text-shadow:none !important}a[href]:after{content:" (" attr(href) ")";font-size:90%}a[href][title]:after{content:none}abbr[title]:after{content:" (" attr(title) ")"}.ir a:after,a[href^="javascript:"]:after,a[href^="#"]:after{content:""}pre,blockquote{border:1px solid #999;page-break-inside:avoid}thead{display:table-header-group}tr,img{page-break-inside:avoid}img{max-width:100% !important}@page{margin:0.5cm}p,h2,h3{orphans:3;widows:3}h1,h2,h3,h4,h5,h6{page-break-after:avoid}}</style>
+</head>
+<body>
+<main>
+<article id="content">
+<header>
+<h1 class="title">Module <code>cp_detection.NeuralODE</code></h1>
+</header>
+<section id="section-intro">
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">from __future__ import print_function, division
+import numpy as np
+import torch
+import torch.nn as nn
+from torch.utils.data import Dataset, DataLoader
+import pytorch_lightning as pl
+from torchdiffeq import odeint_adjoint as odeint
+import matplotlib.pyplot as plt
+
+class GeneralModeDataset(Dataset):
+    &#34;&#34;&#34;
+    A PyTorch Dataset to handle general mode AFM data. 
+    &#34;&#34;&#34;
+
+    def __init__(self, t, d_list, x0, z_list, ode_params):
+        &#34;&#34;&#34;
+        Parameters
+        ----------
+        t : 1D Numpy array 
+            1D Numpy array containing the time stamps corresponding to the ODE solution x(t)
+        ode_params : dict
+            Dictionary containing the necessary parameters for the ODE. 
+            Required form is ode_params = {&#39;A0&#39; : float, &#39;Q&#39; : float, &#39;Om&#39; : float, &#39;k&#39; : float}
+        &#34;&#34;&#34;
+        # Needs modifying - in the final form, we do not necessarily need x0 in both the model and the dataset
+        self.t = np.array(t)
+        self.d_list = d_list
+        self.z_list = z_list
+        self.ode_params = ode_params
+        self.x0 = x0
+
+    def __len__(self):
+        return len(self.d_list)
+
+    def __getitem__(self, idx):
+        sample = {&#39;time&#39;: self.t, &#39;d&#39;: self.d_list[idx], &#39;x0&#39;: self.x0, &#39;z&#39;: self.z_list[idx][:]}
+        return sample
+
+    def __eq__(self, other):
+        &#34;&#34;&#34;
+        Comparison between two GeneralModeDataset objects. True if both objects have the same ODE parameters.
+        &#34;&#34;&#34;
+        return self.ode_params == other.ode_params
+
+    def PlotData(self, idx, figsize = (7, 5), fontsize = 14):
+        data = self.__getitem__(idx)
+        
+        fig, ax = plt.subplots(1, 1, figsize = figsize)
+        ax.plot(data[&#39;time&#39;], data[&#39;z&#39;], &#39;.k&#39;)
+        ax.grid(ls = &#39;--&#39;)
+        ax.set_xlabel(&#39;Normalized Time&#39;, fontsize = fontsize)
+        ax.set_ylabel(&#39;z (nm)&#39;, fontsize = fontsize)
+
+        return fig, ax
+
+class F_cons(nn.Module):
+    &#34;&#34;&#34;
+    A PyTorch module to model the conservative force experienced by the atomic force microscope probe.
+    We assume that the force only depends on z, and model it using a simple MLP.
+
+    ...
+
+    Attributes
+    ----------
+    hidden_nodes : list of int
+        List of the nodes in each of the hidden layers of the model
+    layers : list of torch.nn.Linear objects
+        List of layers in the model. All the layers used are fully connected layers.
+    elu : torch.nn.ELU object
+        Elu activation layer, used for the activations between the hidden layers.
+    tanh : torch.nn.Tanh object
+        Tanh activation layer, used for the actvation for the model output.
+
+    Methods
+    -------
+    forward(z)
+        Returns the neural network output as a function of input z.
+        z is assumed to be a tensor with size [1].
+    &#34;&#34;&#34;
+
+    def __init__(self, hidden_nodes = [4]):
+        &#34;&#34;&#34;
+        Parameters
+        ----------
+        hidden_nodes : list of int
+            List of the nodes in each of the hidden layers of the model
+        &#34;&#34;&#34;
+        super(F_cons, self).__init__()
+        self.hidden_nodes = list(hidden_nodes)
+        self.layers = nn.ModuleList()
+        for i in range(len(self.hidden_nodes)):
+            if i == 0:
+                self.layers.append(nn.Linear(1, self.hidden_nodes[i]))
+            else:
+                self.layers.append(nn.Linear(self.hidden_nodes[i-1], self.hidden_nodes[i]))
+        self.layers.append(nn.Linear(self.hidden_nodes[-1], 1))
+
+        self.elu = nn.ELU()
+        self.tanh = nn.Tanh()
+
+    def forward(self, z):
+        &#34;&#34;&#34;
+        Returns the neural network output as a function of input z.
+        z is assumed to be a tensor with size [1].
+
+        Parameters
+        ----------
+        z : tensor with size [1].
+            Neural network input. Represents the instantaneous tip-sample distance.
+
+        Returns
+        -------
+        F : tensor with size [1].
+            Neural network output. Represents the modeled tip-sample force.
+        &#34;&#34;&#34;
+        interm = self.layers[0](z)
+        
+        for layer in self.layers[1:]:
+            interm = self.elu(interm)
+            interm = layer(interm)
+
+        F = self.tanh(interm)
+        return F
+
+class AFM_NeuralODE(nn.Module):
+    &#34;&#34;&#34;
+    A  Pytorch module to create a NeuralODE modeling the AFM tip-sample dynamics.
+    Note that all length scales involved in the model are scaled by setting 1[nm] = 1 
+    and all timescales scaled to w0*1[s] = 1.
+
+    Attributes
+    ----------
+    Fc : An instance of class F_cons
+        A MLP model to represent the conservative force between the tip and the sample.
+    nfe : int
+        Number of forward evaluations. Incremented by 1 everytime forward() is evaluated.
+    d : float
+        Mean tip-sample distance in units of [nm].
+    A0 : float
+        Free amplitude of the tip at resonance in units of [nm].
+        Follows the definition outlined in M. Lee et. al., Phys. Rev. Lett. 97, 036104 (2006).
+    Om : float
+        Ratio between the resonance frequency f0 and the driving frequency f. Om = f/f0
+    Q : float
+        Q-factor of the cantilever/QTF.
+    k : float
+        Spring constant of the cantilever/QTF in units of [N/m].
+
+    Methods
+    -------
+    forward(t, x)
+        Returns the right-hand-side of the differential equation dx/dt = f(t, x)
+        x is a length 2 vector of the form x = [y, z], where y = dz/dt 
+    &#34;&#34;&#34;
+
+    def __init__(self, A0, Om, Q, k, d = 0., hidden_nodes = [4]):
+        &#34;&#34;&#34;
+        Parameters
+        ----------
+        hidden_nodes : list of int
+            List of the nodes in each of the hidden layers of the model.
+        A0 : float
+            Free amplitude of the tip at resonance in units of [nm].
+            Follows the definition outlined in M. Lee et. al., Phys. Rev. Lett. 97, 036104 (2006).
+        Om : float
+            Ratio between the resonance frequency f0 and the driving frequency f. Om = f/f0
+        Q : float
+            Q-factor of the cantilever/QTF.
+        k : float
+            Spring constant of the cantilever/QTF in units of [N/m].
+        d : float
+            Mean tip-sample distance in units of [nm]. Default value is 0.
+        &#34;&#34;&#34;
+        super(AFM_NeuralODE, self).__init__()
+        self.Fc = F_cons(hidden_nodes)
+        self.nfe = 0
+
+        self.d = d
+        self.A0 = A0
+        self.Om = Om
+        self.Q = Q
+        self.k = k
+
+        # Constant tensors to be used in the model
+        self.C1 = torch.tensor([[-1./self.Q, -1.], [1., 0.]], device = torch.device(&#34;cuda&#34;))
+        self.C2 = torch.tensor([1.,0.], device = torch.device(&#34;cuda&#34;))
+        self.register_buffer(&#39;Constant 1&#39;, self.C1)
+        self.register_buffer(&#39;Constant 2&#39;, self.C2)
+
+    def forward(self, t, x):
+        &#34;&#34;&#34;
+        Returns the right-hand-side of the differential equation dx/dt = f(t, x)
+        x is a length 2 vector of the form x = [y, z], where y = dz/dt 
+
+        Parameters
+        ----------
+        t : float
+            Time
+        x : 1D PyTorch tensor with length 2
+            A length 2 vector of the form x = [y, z], where y = dz/dt
+
+        Returns
+        -------
+        dxdt : 1D PyTorch tensor with length 2
+            A length 2 vector corresponding to dxdt = [dy/dt, dz/dt]
+        &#34;&#34;&#34;
+        self.nfe += 1
+        F = self.Fc(x[1].unsqueeze(-1))
+        ode = torch.matmul(self.C1, x) + (self.d + (self.A0/self.Q)*torch.cos(self.Om*t) + F/self.k) * self.C2
+
+        return ode
+
+
+class LightningTrainer(pl.LightningModule):
+    &#34;&#34;&#34;
+    A PyTorch-Lightning LightningModule for training the NeuralODE created by the class AFM_NeuralODE. 
+
+    ...
+
+    Attributes
+    ----------
+    ODE : An instance of class AFM_NeuralODE
+        A NeuralODE model to represent the dynamics between the tip and the sample.
+    train_dataset : An instance of the class GeneralModeDataset
+        A PyTorch dataset of a given general mode approach data to train the NeuralODE in. 
+    A0 : float
+        Free amplitude of the tip at resonance in units of [nm].
+        Follows the definition outlined in M. Lee et. al., Phys. Rev. Lett. 97, 036104 (2006).
+    Om : float
+        Ratio between the resonance frequency f0 and the driving frequency f. Om = f/f0
+    Q : float
+        Q-factor of the cantilever/QTF.
+    k : float
+        Spring constant of the cantilever/QTF in units of [N/m].
+    lr : float
+        Learning rate of the model. Default value is 0.01.
+    &#34;&#34;&#34;
+
+    def __init__(self, train_dataset, lr = 0.01, hidden_nodes = [4], batch_size = 1, solver = &#39;dopri5&#39;):
+        &#34;&#34;&#34;
+        Parameters
+        ----------
+        train_dataset : An instance of PyTorch Dataset
+            PyTorch dataset corresponding to the training data
+        hidden_nodes : list of int
+            List of the nodes in each of the hidden layers of the model.
+        lr : float
+            Learning rate of the model. Default value is 0.01.
+        &#34;&#34;&#34;
+        super(LightningTrainer, self).__init__()
+        self.train_dataset = train_dataset
+        ode_params = self.train_dataset.ode_params
+        self.ODE = AFM_NeuralODE(**ode_params, d = 0, hidden_nodes = hidden_nodes)
+        self.batch_size = batch_size
+        self.lr = lr
+        self.solver = solver
+
+    def forward(self, t, x0, d):
+        self.ODE.d = d
+
+        x_pred = odeint(self.ODE, x0, t, method = self.solver)
+        z_pred = x_pred[:,1]
+
+        return z_pred
+
+    def training_step(self, batch, batch_nb):
+        t = batch[&#39;time&#39;][0].float()
+        x0 = batch[&#39;x0&#39;][0].float()
+        d = batch[&#39;d&#39;][0]
+
+        z_pred = self.forward(t, x0, d)
+        z_true = batch[&#39;z&#39;][0].float()
+
+        log1pI_pred = self.LogSpectra(z_pred)
+        log1pI_true = self.LogSpectra(z_true)
+
+        loss_function = nn.MSELoss()
+        loss = loss_function(log1pI_pred, log1pI_true)
+
+        tensorboard_logs = {&#39;train_loss&#39;: loss}
+        return {&#39;loss&#39;: loss, &#39;log&#39;: tensorboard_logs}
+
+    @pl.data_loader
+    def train_dataloader(self):
+        return DataLoader(self.train_dataset, batch_size = self.batch_size, shuffle = True)
+
+    @staticmethod
+    def LogSpectra(z):
+        &#34;&#34;&#34;
+        Calculates the complex FFT spectra of the given signal z(t), then calculates the intensity. Finally, returns log1p(intensity), where log1p is preferred over log due to its numerical stability.
+
+        Parameters
+        ----------
+        z : A 1D PyTorch tensor
+            1D tensor of real values, corresponding to the time series z(t)
+
+        Returns
+        -------
+        z_log1pI : A 1d Pytorch tensor
+            1D tensor corresponding to the log1p of the Fourier intensity of z(t).
+        &#34;&#34;&#34;
+
+        z_fft = torch.rfft(z, 1)
+        z_I = torch.sum(z_fft**2, dim = -1)
+        z_log1pI = torch.log1p(z_I)
+
+        return z_log1pI
+
+    def configure_optimizers(self):
+        optim = torch.optim.Adam(self.parameters(), lr = self.lr)
+        sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, &#39;min&#39;, 0.5, 100, threshold = 0.05, threshold_mode = &#39;rel&#39;)
+        return [optim], [sched]</code></pre>
+</details>
+</section>
+<section>
+</section>
+<section>
+</section>
+<section>
+</section>
+<section>
+<h2 class="section-title" id="header-classes">Classes</h2>
+<dl>
+<dt id="cp_detection.NeuralODE.AFM_NeuralODE"><code class="flex name class">
+<span>class <span class="ident">AFM_NeuralODE</span></span>
+<span>(</span><span>A0, Om, Q, k, d=0.0, hidden_nodes=[4])</span>
+</code></dt>
+<dd>
+<section class="desc"><p>A
+Pytorch module to create a NeuralODE modeling the AFM tip-sample dynamics.
+Note that all length scales involved in the model are scaled by setting 1[nm] = 1
+and all timescales scaled to w0*1[s] = 1.</p>
+<h2 id="attributes">Attributes</h2>
+<dl>
+<dt><strong><code>Fc</code></strong> :&ensp;<code>An</code> <code>instance</code> of <code>class</code> <a title="cp_detection.NeuralODE.F_cons" href="#cp_detection.NeuralODE.F_cons"><code>F_cons</code></a></dt>
+<dd>A MLP model to represent the conservative force between the tip and the sample.</dd>
+<dt><strong><code>nfe</code></strong> :&ensp;<code>int</code></dt>
+<dd>Number of forward evaluations. Incremented by 1 everytime forward() is evaluated.</dd>
+<dt><strong><code>d</code></strong> :&ensp;<code>float</code></dt>
+<dd>Mean tip-sample distance in units of [nm].</dd>
+<dt><strong><code>A0</code></strong> :&ensp;<code>float</code></dt>
+<dd>Free amplitude of the tip at resonance in units of [nm].
+Follows the definition outlined in M. Lee et. al., Phys. Rev. Lett. 97, 036104 (2006).</dd>
+<dt><strong><code>Om</code></strong> :&ensp;<code>float</code></dt>
+<dd>Ratio between the resonance frequency f0 and the driving frequency f. Om = f/f0</dd>
+<dt><strong><code>Q</code></strong> :&ensp;<code>float</code></dt>
+<dd>Q-factor of the cantilever/QTF.</dd>
+<dt><strong><code>k</code></strong> :&ensp;<code>float</code></dt>
+<dd>Spring constant of the cantilever/QTF in units of [N/m].</dd>
+</dl>
+<h2 id="methods">Methods</h2>
+<p>forward(t, x)
+Returns the right-hand-side of the differential equation dx/dt = f(t, x)
+x is a length 2 vector of the form x = [y, z], where y = dz/dt </p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>hidden_nodes</code></strong> :&ensp;<code>list</code> of <code>int</code></dt>
+<dd>List of the nodes in each of the hidden layers of the model.</dd>
+<dt><strong><code>A0</code></strong> :&ensp;<code>float</code></dt>
+<dd>Free amplitude of the tip at resonance in units of [nm].
+Follows the definition outlined in M. Lee et. al., Phys. Rev. Lett. 97, 036104 (2006).</dd>
+<dt><strong><code>Om</code></strong> :&ensp;<code>float</code></dt>
+<dd>Ratio between the resonance frequency f0 and the driving frequency f. Om = f/f0</dd>
+<dt><strong><code>Q</code></strong> :&ensp;<code>float</code></dt>
+<dd>Q-factor of the cantilever/QTF.</dd>
+<dt><strong><code>k</code></strong> :&ensp;<code>float</code></dt>
+<dd>Spring constant of the cantilever/QTF in units of [N/m].</dd>
+<dt><strong><code>d</code></strong> :&ensp;<code>float</code></dt>
+<dd>Mean tip-sample distance in units of [nm]. Default value is 0.</dd>
+</dl></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class AFM_NeuralODE(nn.Module):
+    &#34;&#34;&#34;
+    A  Pytorch module to create a NeuralODE modeling the AFM tip-sample dynamics.
+    Note that all length scales involved in the model are scaled by setting 1[nm] = 1 
+    and all timescales scaled to w0*1[s] = 1.
+
+    Attributes
+    ----------
+    Fc : An instance of class F_cons
+        A MLP model to represent the conservative force between the tip and the sample.
+    nfe : int
+        Number of forward evaluations. Incremented by 1 everytime forward() is evaluated.
+    d : float
+        Mean tip-sample distance in units of [nm].
+    A0 : float
+        Free amplitude of the tip at resonance in units of [nm].
+        Follows the definition outlined in M. Lee et. al., Phys. Rev. Lett. 97, 036104 (2006).
+    Om : float
+        Ratio between the resonance frequency f0 and the driving frequency f. Om = f/f0
+    Q : float
+        Q-factor of the cantilever/QTF.
+    k : float
+        Spring constant of the cantilever/QTF in units of [N/m].
+
+    Methods
+    -------
+    forward(t, x)
+        Returns the right-hand-side of the differential equation dx/dt = f(t, x)
+        x is a length 2 vector of the form x = [y, z], where y = dz/dt 
+    &#34;&#34;&#34;
+
+    def __init__(self, A0, Om, Q, k, d = 0., hidden_nodes = [4]):
+        &#34;&#34;&#34;
+        Parameters
+        ----------
+        hidden_nodes : list of int
+            List of the nodes in each of the hidden layers of the model.
+        A0 : float
+            Free amplitude of the tip at resonance in units of [nm].
+            Follows the definition outlined in M. Lee et. al., Phys. Rev. Lett. 97, 036104 (2006).
+        Om : float
+            Ratio between the resonance frequency f0 and the driving frequency f. Om = f/f0
+        Q : float
+            Q-factor of the cantilever/QTF.
+        k : float
+            Spring constant of the cantilever/QTF in units of [N/m].
+        d : float
+            Mean tip-sample distance in units of [nm]. Default value is 0.
+        &#34;&#34;&#34;
+        super(AFM_NeuralODE, self).__init__()
+        self.Fc = F_cons(hidden_nodes)
+        self.nfe = 0
+
+        self.d = d
+        self.A0 = A0
+        self.Om = Om
+        self.Q = Q
+        self.k = k
+
+        # Constant tensors to be used in the model
+        self.C1 = torch.tensor([[-1./self.Q, -1.], [1., 0.]], device = torch.device(&#34;cuda&#34;))
+        self.C2 = torch.tensor([1.,0.], device = torch.device(&#34;cuda&#34;))
+        self.register_buffer(&#39;Constant 1&#39;, self.C1)
+        self.register_buffer(&#39;Constant 2&#39;, self.C2)
+
+    def forward(self, t, x):
+        &#34;&#34;&#34;
+        Returns the right-hand-side of the differential equation dx/dt = f(t, x)
+        x is a length 2 vector of the form x = [y, z], where y = dz/dt 
+
+        Parameters
+        ----------
+        t : float
+            Time
+        x : 1D PyTorch tensor with length 2
+            A length 2 vector of the form x = [y, z], where y = dz/dt
+
+        Returns
+        -------
+        dxdt : 1D PyTorch tensor with length 2
+            A length 2 vector corresponding to dxdt = [dy/dt, dz/dt]
+        &#34;&#34;&#34;
+        self.nfe += 1
+        F = self.Fc(x[1].unsqueeze(-1))
+        ode = torch.matmul(self.C1, x) + (self.d + (self.A0/self.Q)*torch.cos(self.Om*t) + F/self.k) * self.C2
+
+        return ode</code></pre>
+</details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li>torch.nn.modules.module.Module</li>
+</ul>
+<h3>Methods</h3>
+<dl>
+<dt id="cp_detection.NeuralODE.AFM_NeuralODE.forward"><code class="name flex">
+<span>def <span class="ident">forward</span></span>(<span>self, t, x)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Returns the right-hand-side of the differential equation dx/dt = f(t, x)
+x is a length 2 vector of the form x = [y, z], where y = dz/dt </p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>t</code></strong> :&ensp;<code>float</code></dt>
+<dd>Time</dd>
+<dt><strong><code>x</code></strong> :&ensp;<code>1D</code> <code>PyTorch</code> <code>tensor</code> <code>with</code> <code>length</code> <code>2</code></dt>
+<dd>A length 2 vector of the form x = [y, z], where y = dz/dt</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>dxdt</code></strong> :&ensp;<code>1D</code> <code>PyTorch</code> <code>tensor</code> <code>with</code> <code>length</code> <code>2</code></dt>
+<dd>A length 2 vector corresponding to dxdt = [dy/dt, dz/dt]</dd>
+</dl></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def forward(self, t, x):
+    &#34;&#34;&#34;
+    Returns the right-hand-side of the differential equation dx/dt = f(t, x)
+    x is a length 2 vector of the form x = [y, z], where y = dz/dt 
+
+    Parameters
+    ----------
+    t : float
+        Time
+    x : 1D PyTorch tensor with length 2
+        A length 2 vector of the form x = [y, z], where y = dz/dt
+
+    Returns
+    -------
+    dxdt : 1D PyTorch tensor with length 2
+        A length 2 vector corresponding to dxdt = [dy/dt, dz/dt]
+    &#34;&#34;&#34;
+    self.nfe += 1
+    F = self.Fc(x[1].unsqueeze(-1))
+    ode = torch.matmul(self.C1, x) + (self.d + (self.A0/self.Q)*torch.cos(self.Om*t) + F/self.k) * self.C2
+
+    return ode</code></pre>
+</details>
+</dd>
+</dl>
+</dd>
+<dt id="cp_detection.NeuralODE.F_cons"><code class="flex name class">
+<span>class <span class="ident">F_cons</span></span>
+<span>(</span><span>hidden_nodes=[4])</span>
+</code></dt>
+<dd>
+<section class="desc"><p>A PyTorch module to model the conservative force experienced by the atomic force microscope probe.
+We assume that the force only depends on z, and model it using a simple MLP.</p>
+<p>&hellip;</p>
+<h2 id="attributes">Attributes</h2>
+<dl>
+<dt><strong><code>hidden_nodes</code></strong> :&ensp;<code>list</code> of <code>int</code></dt>
+<dd>List of the nodes in each of the hidden layers of the model</dd>
+<dt><strong><code>layers</code></strong> :&ensp;<code>list</code> of <code>torch.nn.Linear</code> <code>objects</code></dt>
+<dd>List of layers in the model. All the layers used are fully connected layers.</dd>
+<dt><strong><code>elu</code></strong> :&ensp;<code>torch.nn.ELU</code> <code>object</code></dt>
+<dd>Elu activation layer, used for the activations between the hidden layers.</dd>
+<dt><strong><code>tanh</code></strong> :&ensp;<code>torch.nn.Tanh</code> <code>object</code></dt>
+<dd>Tanh activation layer, used for the actvation for the model output.</dd>
+</dl>
+<h2 id="methods">Methods</h2>
+<p>forward(z)
+Returns the neural network output as a function of input z.
+z is assumed to be a tensor with size [1].</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>hidden_nodes</code></strong> :&ensp;<code>list</code> of <code>int</code></dt>
+<dd>List of the nodes in each of the hidden layers of the model</dd>
+</dl></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class F_cons(nn.Module):
+    &#34;&#34;&#34;
+    A PyTorch module to model the conservative force experienced by the atomic force microscope probe.
+    We assume that the force only depends on z, and model it using a simple MLP.
+
+    ...
+
+    Attributes
+    ----------
+    hidden_nodes : list of int
+        List of the nodes in each of the hidden layers of the model
+    layers : list of torch.nn.Linear objects
+        List of layers in the model. All the layers used are fully connected layers.
+    elu : torch.nn.ELU object
+        Elu activation layer, used for the activations between the hidden layers.
+    tanh : torch.nn.Tanh object
+        Tanh activation layer, used for the actvation for the model output.
+
+    Methods
+    -------
+    forward(z)
+        Returns the neural network output as a function of input z.
+        z is assumed to be a tensor with size [1].
+    &#34;&#34;&#34;
+
+    def __init__(self, hidden_nodes = [4]):
+        &#34;&#34;&#34;
+        Parameters
+        ----------
+        hidden_nodes : list of int
+            List of the nodes in each of the hidden layers of the model
+        &#34;&#34;&#34;
+        super(F_cons, self).__init__()
+        self.hidden_nodes = list(hidden_nodes)
+        self.layers = nn.ModuleList()
+        for i in range(len(self.hidden_nodes)):
+            if i == 0:
+                self.layers.append(nn.Linear(1, self.hidden_nodes[i]))
+            else:
+                self.layers.append(nn.Linear(self.hidden_nodes[i-1], self.hidden_nodes[i]))
+        self.layers.append(nn.Linear(self.hidden_nodes[-1], 1))
+
+        self.elu = nn.ELU()
+        self.tanh = nn.Tanh()
+
+    def forward(self, z):
+        &#34;&#34;&#34;
+        Returns the neural network output as a function of input z.
+        z is assumed to be a tensor with size [1].
+
+        Parameters
+        ----------
+        z : tensor with size [1].
+            Neural network input. Represents the instantaneous tip-sample distance.
+
+        Returns
+        -------
+        F : tensor with size [1].
+            Neural network output. Represents the modeled tip-sample force.
+        &#34;&#34;&#34;
+        interm = self.layers[0](z)
+        
+        for layer in self.layers[1:]:
+            interm = self.elu(interm)
+            interm = layer(interm)
+
+        F = self.tanh(interm)
+        return F</code></pre>
+</details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li>torch.nn.modules.module.Module</li>
+</ul>
+<h3>Methods</h3>
+<dl>
+<dt id="cp_detection.NeuralODE.F_cons.forward"><code class="name flex">
+<span>def <span class="ident">forward</span></span>(<span>self, z)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Returns the neural network output as a function of input z.
+z is assumed to be a tensor with size [1].</p>
+<h2 id="parameters">Parameters</h2>
+<p>z : tensor with size [1].
+Neural network input. Represents the instantaneous tip-sample distance.</p>
+<h2 id="returns">Returns</h2>
+<p>F : tensor with size [1].
+Neural network output. Represents the modeled tip-sample force.</p></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def forward(self, z):
+    &#34;&#34;&#34;
+    Returns the neural network output as a function of input z.
+    z is assumed to be a tensor with size [1].
+
+    Parameters
+    ----------
+    z : tensor with size [1].
+        Neural network input. Represents the instantaneous tip-sample distance.
+
+    Returns
+    -------
+    F : tensor with size [1].
+        Neural network output. Represents the modeled tip-sample force.
+    &#34;&#34;&#34;
+    interm = self.layers[0](z)
+    
+    for layer in self.layers[1:]:
+        interm = self.elu(interm)
+        interm = layer(interm)
+
+    F = self.tanh(interm)
+    return F</code></pre>
+</details>
+</dd>
+</dl>
+</dd>
+<dt id="cp_detection.NeuralODE.GeneralModeDataset"><code class="flex name class">
+<span>class <span class="ident">GeneralModeDataset</span></span>
+<span>(</span><span>t, d_list, x0, z_list, ode_params)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>A PyTorch Dataset to handle general mode AFM data. </p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>t</code></strong> :&ensp;<code>1D</code> <code>Numpy</code> <code>array</code></dt>
+<dd>1D Numpy array containing the time stamps corresponding to the ODE solution x(t)</dd>
+<dt><strong><code>ode_params</code></strong> :&ensp;<code>dict</code></dt>
+<dd>Dictionary containing the necessary parameters for the ODE.
+Required form is ode_params = {'A0' : float, 'Q' : float, 'Om' : float, 'k' : float}</dd>
+</dl></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class GeneralModeDataset(Dataset):
+    &#34;&#34;&#34;
+    A PyTorch Dataset to handle general mode AFM data. 
+    &#34;&#34;&#34;
+
+    def __init__(self, t, d_list, x0, z_list, ode_params):
+        &#34;&#34;&#34;
+        Parameters
+        ----------
+        t : 1D Numpy array 
+            1D Numpy array containing the time stamps corresponding to the ODE solution x(t)
+        ode_params : dict
+            Dictionary containing the necessary parameters for the ODE. 
+            Required form is ode_params = {&#39;A0&#39; : float, &#39;Q&#39; : float, &#39;Om&#39; : float, &#39;k&#39; : float}
+        &#34;&#34;&#34;
+        # Needs modifying - in the final form, we do not necessarily need x0 in both the model and the dataset
+        self.t = np.array(t)
+        self.d_list = d_list
+        self.z_list = z_list
+        self.ode_params = ode_params
+        self.x0 = x0
+
+    def __len__(self):
+        return len(self.d_list)
+
+    def __getitem__(self, idx):
+        sample = {&#39;time&#39;: self.t, &#39;d&#39;: self.d_list[idx], &#39;x0&#39;: self.x0, &#39;z&#39;: self.z_list[idx][:]}
+        return sample
+
+    def __eq__(self, other):
+        &#34;&#34;&#34;
+        Comparison between two GeneralModeDataset objects. True if both objects have the same ODE parameters.
+        &#34;&#34;&#34;
+        return self.ode_params == other.ode_params
+
+    def PlotData(self, idx, figsize = (7, 5), fontsize = 14):
+        data = self.__getitem__(idx)
+        
+        fig, ax = plt.subplots(1, 1, figsize = figsize)
+        ax.plot(data[&#39;time&#39;], data[&#39;z&#39;], &#39;.k&#39;)
+        ax.grid(ls = &#39;--&#39;)
+        ax.set_xlabel(&#39;Normalized Time&#39;, fontsize = fontsize)
+        ax.set_ylabel(&#39;z (nm)&#39;, fontsize = fontsize)
+
+        return fig, ax</code></pre>
+</details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li>torch.utils.data.dataset.Dataset</li>
+</ul>
+<h3>Methods</h3>
+<dl>
+<dt id="cp_detection.NeuralODE.GeneralModeDataset.PlotData"><code class="name flex">
+<span>def <span class="ident">PlotData</span></span>(<span>self, idx, figsize=(7, 5), fontsize=14)</span>
+</code></dt>
+<dd>
+<section class="desc"></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def PlotData(self, idx, figsize = (7, 5), fontsize = 14):
+    data = self.__getitem__(idx)
+    
+    fig, ax = plt.subplots(1, 1, figsize = figsize)
+    ax.plot(data[&#39;time&#39;], data[&#39;z&#39;], &#39;.k&#39;)
+    ax.grid(ls = &#39;--&#39;)
+    ax.set_xlabel(&#39;Normalized Time&#39;, fontsize = fontsize)
+    ax.set_ylabel(&#39;z (nm)&#39;, fontsize = fontsize)
+
+    return fig, ax</code></pre>
+</details>
+</dd>
+</dl>
+</dd>
+<dt id="cp_detection.NeuralODE.LightningTrainer"><code class="flex name class">
+<span>class <span class="ident">LightningTrainer</span></span>
+<span>(</span><span>train_dataset, lr=0.01, hidden_nodes=[4], batch_size=1, solver='dopri5')</span>
+</code></dt>
+<dd>
+<section class="desc"><p>A PyTorch-Lightning LightningModule for training the NeuralODE created by the class AFM_NeuralODE. </p>
+<p>&hellip;</p>
+<h2 id="attributes">Attributes</h2>
+<dl>
+<dt><strong><code>ODE</code></strong> :&ensp;<code>An</code> <code>instance</code> of <code>class</code> <a title="cp_detection.NeuralODE.AFM_NeuralODE" href="#cp_detection.NeuralODE.AFM_NeuralODE"><code>AFM_NeuralODE</code></a></dt>
+<dd>A NeuralODE model to represent the dynamics between the tip and the sample.</dd>
+<dt><strong><code>train_dataset</code></strong> :&ensp;<code>An</code> <code>instance</code> of <code>the</code> <code>class</code> <a title="cp_detection.NeuralODE.GeneralModeDataset" href="#cp_detection.NeuralODE.GeneralModeDataset"><code>GeneralModeDataset</code></a></dt>
+<dd>A PyTorch dataset of a given general mode approach data to train the NeuralODE in.</dd>
+<dt><strong><code>A0</code></strong> :&ensp;<code>float</code></dt>
+<dd>Free amplitude of the tip at resonance in units of [nm].
+Follows the definition outlined in M. Lee et. al., Phys. Rev. Lett. 97, 036104 (2006).</dd>
+<dt><strong><code>Om</code></strong> :&ensp;<code>float</code></dt>
+<dd>Ratio between the resonance frequency f0 and the driving frequency f. Om = f/f0</dd>
+<dt><strong><code>Q</code></strong> :&ensp;<code>float</code></dt>
+<dd>Q-factor of the cantilever/QTF.</dd>
+<dt><strong><code>k</code></strong> :&ensp;<code>float</code></dt>
+<dd>Spring constant of the cantilever/QTF in units of [N/m].</dd>
+<dt><strong><code>lr</code></strong> :&ensp;<code>float</code></dt>
+<dd>Learning rate of the model. Default value is 0.01.</dd>
+</dl>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>train_dataset</code></strong> :&ensp;<code>An</code> <code>instance</code> of <code>PyTorch</code> <code>Dataset</code></dt>
+<dd>PyTorch dataset corresponding to the training data</dd>
+<dt><strong><code>hidden_nodes</code></strong> :&ensp;<code>list</code> of <code>int</code></dt>
+<dd>List of the nodes in each of the hidden layers of the model.</dd>
+<dt><strong><code>lr</code></strong> :&ensp;<code>float</code></dt>
+<dd>Learning rate of the model. Default value is 0.01.</dd>
+</dl></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class LightningTrainer(pl.LightningModule):
+    &#34;&#34;&#34;
+    A PyTorch-Lightning LightningModule for training the NeuralODE created by the class AFM_NeuralODE. 
+
+    ...
+
+    Attributes
+    ----------
+    ODE : An instance of class AFM_NeuralODE
+        A NeuralODE model to represent the dynamics between the tip and the sample.
+    train_dataset : An instance of the class GeneralModeDataset
+        A PyTorch dataset of a given general mode approach data to train the NeuralODE in. 
+    A0 : float
+        Free amplitude of the tip at resonance in units of [nm].
+        Follows the definition outlined in M. Lee et. al., Phys. Rev. Lett. 97, 036104 (2006).
+    Om : float
+        Ratio between the resonance frequency f0 and the driving frequency f. Om = f/f0
+    Q : float
+        Q-factor of the cantilever/QTF.
+    k : float
+        Spring constant of the cantilever/QTF in units of [N/m].
+    lr : float
+        Learning rate of the model. Default value is 0.01.
+    &#34;&#34;&#34;
+
+    def __init__(self, train_dataset, lr = 0.01, hidden_nodes = [4], batch_size = 1, solver = &#39;dopri5&#39;):
+        &#34;&#34;&#34;
+        Parameters
+        ----------
+        train_dataset : An instance of PyTorch Dataset
+            PyTorch dataset corresponding to the training data
+        hidden_nodes : list of int
+            List of the nodes in each of the hidden layers of the model.
+        lr : float
+            Learning rate of the model. Default value is 0.01.
+        &#34;&#34;&#34;
+        super(LightningTrainer, self).__init__()
+        self.train_dataset = train_dataset
+        ode_params = self.train_dataset.ode_params
+        self.ODE = AFM_NeuralODE(**ode_params, d = 0, hidden_nodes = hidden_nodes)
+        self.batch_size = batch_size
+        self.lr = lr
+        self.solver = solver
+
+    def forward(self, t, x0, d):
+        self.ODE.d = d
+
+        x_pred = odeint(self.ODE, x0, t, method = self.solver)
+        z_pred = x_pred[:,1]
+
+        return z_pred
+
+    def training_step(self, batch, batch_nb):
+        t = batch[&#39;time&#39;][0].float()
+        x0 = batch[&#39;x0&#39;][0].float()
+        d = batch[&#39;d&#39;][0]
+
+        z_pred = self.forward(t, x0, d)
+        z_true = batch[&#39;z&#39;][0].float()
+
+        log1pI_pred = self.LogSpectra(z_pred)
+        log1pI_true = self.LogSpectra(z_true)
+
+        loss_function = nn.MSELoss()
+        loss = loss_function(log1pI_pred, log1pI_true)
+
+        tensorboard_logs = {&#39;train_loss&#39;: loss}
+        return {&#39;loss&#39;: loss, &#39;log&#39;: tensorboard_logs}
+
+    @pl.data_loader
+    def train_dataloader(self):
+        return DataLoader(self.train_dataset, batch_size = self.batch_size, shuffle = True)
+
+    @staticmethod
+    def LogSpectra(z):
+        &#34;&#34;&#34;
+        Calculates the complex FFT spectra of the given signal z(t), then calculates the intensity. Finally, returns log1p(intensity), where log1p is preferred over log due to its numerical stability.
+
+        Parameters
+        ----------
+        z : A 1D PyTorch tensor
+            1D tensor of real values, corresponding to the time series z(t)
+
+        Returns
+        -------
+        z_log1pI : A 1d Pytorch tensor
+            1D tensor corresponding to the log1p of the Fourier intensity of z(t).
+        &#34;&#34;&#34;
+
+        z_fft = torch.rfft(z, 1)
+        z_I = torch.sum(z_fft**2, dim = -1)
+        z_log1pI = torch.log1p(z_I)
+
+        return z_log1pI
+
+    def configure_optimizers(self):
+        optim = torch.optim.Adam(self.parameters(), lr = self.lr)
+        sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, &#39;min&#39;, 0.5, 100, threshold = 0.05, threshold_mode = &#39;rel&#39;)
+        return [optim], [sched]</code></pre>
+</details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li>pytorch_lightning.root_module.root_module.LightningModule</li>
+<li>pytorch_lightning.root_module.grads.GradInformation</li>
+<li>pytorch_lightning.root_module.model_saving.ModelIO</li>
+<li>pytorch_lightning.root_module.hooks.ModelHooks</li>
+<li>torch.nn.modules.module.Module</li>
+</ul>
+<h3>Static methods</h3>
+<dl>
+<dt id="cp_detection.NeuralODE.LightningTrainer.LogSpectra"><code class="name flex">
+<span>def <span class="ident">LogSpectra</span></span>(<span>z)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Calculates the complex FFT spectra of the given signal z(t), then calculates the intensity. Finally, returns log1p(intensity), where log1p is preferred over log due to its numerical stability.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>z</code></strong> :&ensp;<code>A</code> <code>1D</code> <code>PyTorch</code> <code>tensor</code></dt>
+<dd>1D tensor of real values, corresponding to the time series z(t)</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>z_log1pI</code></strong> :&ensp;<code>A</code> <code>1d</code> <code>Pytorch</code> <code>tensor</code></dt>
+<dd>1D tensor corresponding to the log1p of the Fourier intensity of z(t).</dd>
+</dl></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@staticmethod
+def LogSpectra(z):
+    &#34;&#34;&#34;
+    Calculates the complex FFT spectra of the given signal z(t), then calculates the intensity. Finally, returns log1p(intensity), where log1p is preferred over log due to its numerical stability.
+
+    Parameters
+    ----------
+    z : A 1D PyTorch tensor
+        1D tensor of real values, corresponding to the time series z(t)
+
+    Returns
+    -------
+    z_log1pI : A 1d Pytorch tensor
+        1D tensor corresponding to the log1p of the Fourier intensity of z(t).
+    &#34;&#34;&#34;
+
+    z_fft = torch.rfft(z, 1)
+    z_I = torch.sum(z_fft**2, dim = -1)
+    z_log1pI = torch.log1p(z_I)
+
+    return z_log1pI</code></pre>
+</details>
+</dd>
+</dl>
+<h3>Methods</h3>
+<dl>
+<dt id="cp_detection.NeuralODE.LightningTrainer.configure_optimizers"><code class="name flex">
+<span>def <span class="ident">configure_optimizers</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Return a list of optimizers and a list of schedulers (could be empty)
+:return:</p></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def configure_optimizers(self):
+    optim = torch.optim.Adam(self.parameters(), lr = self.lr)
+    sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, &#39;min&#39;, 0.5, 100, threshold = 0.05, threshold_mode = &#39;rel&#39;)
+    return [optim], [sched]</code></pre>
+</details>
+</dd>
+<dt id="cp_detection.NeuralODE.LightningTrainer.forward"><code class="name flex">
+<span>def <span class="ident">forward</span></span>(<span>self, t, x0, d)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Expand model in into whatever you need.
+Also need to return the target
+:param x:
+:return:</p></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def forward(self, t, x0, d):
+    self.ODE.d = d
+
+    x_pred = odeint(self.ODE, x0, t, method = self.solver)
+    z_pred = x_pred[:,1]
+
+    return z_pred</code></pre>
+</details>
+</dd>
+<dt id="cp_detection.NeuralODE.LightningTrainer.train_dataloader"><code class="name flex">
+<span>def <span class="ident">train_dataloader</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<section class="desc"></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def _get_data_loader(self):
+    try:
+        value = getattr(self, attr_name)
+    except AttributeError:
+        try:
+            value = fn(self)  # Lazy evaluation, done only once.
+            if (
+                    value is not None and
+                    not isinstance(value, list) and
+                    fn.__name__ in [&#39;test_dataloader&#39;, &#39;val_dataloader&#39;]
+            ):
+                value = [value]
+        except AttributeError as e:
+            # Guard against AttributeError suppression. (Issue #142)
+            traceback.print_exc()
+            error = f&#39;{fn.__name__}: An AttributeError was encountered: &#39; + str(e)
+            raise RuntimeError(error) from e
+        setattr(self, attr_name, value)  # Memoize evaluation.
+    return value</code></pre>
+</details>
+</dd>
+<dt id="cp_detection.NeuralODE.LightningTrainer.training_step"><code class="name flex">
+<span>def <span class="ident">training_step</span></span>(<span>self, batch, batch_nb)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>return loss, dict with metrics for tqdm
+:param called with batch, batch_nb
+additional: optimizer_i if multiple optimizers used
+:return: dict with loss key and optional log, progress keys
+if implementing training_step, return whatever you need in that step</p></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def training_step(self, batch, batch_nb):
+    t = batch[&#39;time&#39;][0].float()
+    x0 = batch[&#39;x0&#39;][0].float()
+    d = batch[&#39;d&#39;][0]
+
+    z_pred = self.forward(t, x0, d)
+    z_true = batch[&#39;z&#39;][0].float()
+
+    log1pI_pred = self.LogSpectra(z_pred)
+    log1pI_true = self.LogSpectra(z_true)
+
+    loss_function = nn.MSELoss()
+    loss = loss_function(log1pI_pred, log1pI_true)
+
+    tensorboard_logs = {&#39;train_loss&#39;: loss}
+    return {&#39;loss&#39;: loss, &#39;log&#39;: tensorboard_logs}</code></pre>
+</details>
+</dd>
+</dl>
+</dd>
+</dl>
+</section>
+</article>
+<nav id="sidebar">
+<h1>Index</h1>
+<div class="toc">
+<ul></ul>
+</div>
+<ul id="index">
+<li><h3>Super-module</h3>
+<ul>
+<li><code><a title="cp_detection" href="index.html">cp_detection</a></code></li>
+</ul>
+</li>
+<li><h3><a href="#header-classes">Classes</a></h3>
+<ul>
+<li>
+<h4><code><a title="cp_detection.NeuralODE.AFM_NeuralODE" href="#cp_detection.NeuralODE.AFM_NeuralODE">AFM_NeuralODE</a></code></h4>
+<ul class="">
+<li><code><a title="cp_detection.NeuralODE.AFM_NeuralODE.forward" href="#cp_detection.NeuralODE.AFM_NeuralODE.forward">forward</a></code></li>
+</ul>
+</li>
+<li>
+<h4><code><a title="cp_detection.NeuralODE.F_cons" href="#cp_detection.NeuralODE.F_cons">F_cons</a></code></h4>
+<ul class="">
+<li><code><a title="cp_detection.NeuralODE.F_cons.forward" href="#cp_detection.NeuralODE.F_cons.forward">forward</a></code></li>
+</ul>
+</li>
+<li>
+<h4><code><a title="cp_detection.NeuralODE.GeneralModeDataset" href="#cp_detection.NeuralODE.GeneralModeDataset">GeneralModeDataset</a></code></h4>
+<ul class="">
+<li><code><a title="cp_detection.NeuralODE.GeneralModeDataset.PlotData" href="#cp_detection.NeuralODE.GeneralModeDataset.PlotData">PlotData</a></code></li>
+</ul>
+</li>
+<li>
+<h4><code><a title="cp_detection.NeuralODE.LightningTrainer" href="#cp_detection.NeuralODE.LightningTrainer">LightningTrainer</a></code></h4>
+<ul class="">
+<li><code><a title="cp_detection.NeuralODE.LightningTrainer.LogSpectra" href="#cp_detection.NeuralODE.LightningTrainer.LogSpectra">LogSpectra</a></code></li>
+<li><code><a title="cp_detection.NeuralODE.LightningTrainer.configure_optimizers" href="#cp_detection.NeuralODE.LightningTrainer.configure_optimizers">configure_optimizers</a></code></li>
+<li><code><a title="cp_detection.NeuralODE.LightningTrainer.forward" href="#cp_detection.NeuralODE.LightningTrainer.forward">forward</a></code></li>
+<li><code><a title="cp_detection.NeuralODE.LightningTrainer.train_dataloader" href="#cp_detection.NeuralODE.LightningTrainer.train_dataloader">train_dataloader</a></code></li>
+<li><code><a title="cp_detection.NeuralODE.LightningTrainer.training_step" href="#cp_detection.NeuralODE.LightningTrainer.training_step">training_step</a></code></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</nav>
+</main>
+<footer id="footer">
+<p>Generated by <a href="https://pdoc3.github.io/pdoc"><cite>pdoc</cite> 0.7.2</a>.</p>
+</footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+<script>hljs.initHighlightingOnLoad()</script>
+</body>
+</html>

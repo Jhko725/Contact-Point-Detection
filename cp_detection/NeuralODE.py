@@ -182,8 +182,8 @@ class AFM_NeuralODE(nn.Module):
         self.k = k
 
         # Constant tensors to be used in the model
-        self.C1 = torch.tensor([[-1./self.Q, -1.], [1., 0.]])
-        self.C2 = torch.tensor([1.,0.])
+        self.C1 = torch.tensor([[-1./self.Q, -1.], [1., 0.]], device = torch.device("cuda"))
+        self.C2 = torch.tensor([1.,0.], device = torch.device("cuda"))
         self.register_buffer('Constant 1', self.C1)
         self.register_buffer('Constant 2', self.C2)
 
@@ -206,7 +206,6 @@ class AFM_NeuralODE(nn.Module):
         """
         self.nfe += 1
         F = self.Fc(x[1].unsqueeze(-1))
-
         ode = torch.matmul(self.C1, x) + (self.d + (self.A0/self.Q)*torch.cos(self.Om*t) + F/self.k) * self.C2
 
         return ode
@@ -265,14 +264,13 @@ class LightningTrainer(pl.LightningModule):
         return z_pred
 
     def training_step(self, batch, batch_nb):
-
-        t = batch['time'].float()
-        x0 = batch['x0'].float()
-        d = batch['d']
+        t = batch['time'][0].float()
+        x0 = batch['x0'][0].float()
+        d = batch['d'][0]
 
         z_pred = self.forward(t, x0, d)
-        z_true = batch['z'].float()
-        
+        z_true = batch['z'][0].float()
+
         log1pI_pred = self.LogSpectra(z_pred)
         log1pI_true = self.LogSpectra(z_true)
 
