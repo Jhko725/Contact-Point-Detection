@@ -101,16 +101,16 @@ class F_cons(nn.Module):
     def forward(self, z):
         """
         Returns the neural network output as a function of input z.
-        z is assumed to be a tensor with size [1].
+        z is assumed to be a tensor with size [batch_size, 1].
 
         Parameters
         ----------
-        z : tensor with size [1].
+        z : tensor with dimensions [batch_size, 1].
             Neural network input. Represents the instantaneous tip-sample distance.
 
         Returns
         -------
-        F : tensor with size [1].
+        F : tensor with dimensions [batch_size, 1].
             Neural network output. Represents the modeled tip-sample force.
         """
         interm = self.layers[0](z)
@@ -153,7 +153,7 @@ class AFM_NeuralODE(nn.Module):
         x is a length 2 vector of the form x = [y, z], where y = dz/dt 
     """
 
-    def __init__(self, A0, Om, Q, k, d = 0., hidden_nodes = [4]):
+    def __init__(self, A0, Om, Q, k, hidden_nodes = [4]):
         """
         Parameters
         ----------
@@ -168,47 +168,51 @@ class AFM_NeuralODE(nn.Module):
             Q-factor of the cantilever/QTF.
         k : float
             Spring constant of the cantilever/QTF in units of [N/m].
-        d : float
-            Mean tip-sample distance in units of [nm]. Default value is 0.
+        d : PyTorch tensor with dimensions [batch_size, 1]
+            Batched mean tip-sample distance in units of [nm]. Initialized to None.
         """
         super(AFM_NeuralODE, self).__init__()
         self.Fc = F_cons(hidden_nodes)
         self.nfe = 0
 
-        self.d = d
+        self.d = None
         self.A0 = A0
         self.Om = Om
         self.Q = Q
         self.k = k
 
         # Constant tensors to be used in the model
-        self.C1 = torch.tensor([[-1./self.Q, -1.], [1., 0.]], device = torch.device("cuda"))
-        self.C2 = torch.tensor([1.,0.], device = torch.device("cuda"))
+        self.C1 = torch.tensor([[-1./self.Q, -1.], [1., 0.]], device = torch.device("cuda")).unsqueeze(0) # Has size = (1, 2, 2)
+        self.C2 = torch.tensor([[1.],[0.]], device = torch.device("cuda")).unsqueeze(0) # Has size = (1, 2, 1)
         self.register_buffer('Constant 1', self.C1)
         self.register_buffer('Constant 2', self.C2)
 
     def forward(self, t, x):
         """
         Returns the right-hand-side of the differential equation dx/dt = f(t, x)
-        x is a length 2 vector of the form x = [y, z], where y = dz/dt 
+        x is a PyTorch tensor with size [batch_size, 2], where the second dimension corresponds to length 2 vector of the x = [y, z], where y = dz/dt 
 
         Parameters
         ----------
         t : float
             Time
-        x : 1D PyTorch tensor with length 2
-            A length 2 vector of the form x = [y, z], where y = dz/dt
+        x : PyTorch tensor with dimensions [batch_size, 2]
+            The second dimension correspond to x = [y, z], where y = dz/dt
 
         Returns
         -------
-        dxdt : 1D PyTorch tensor with length 2
-            A length 2 vector corresponding to dxdt = [dy/dt, dz/dt]
+        dxdt : PyTorch tensor with dimensions [batch_size, 2]
+            The second dimension corresponds to dxdt = [dy/dt, dz/dt]
         """
         self.nfe += 1
-        F = self.Fc(x[1].unsqueeze(-1))
-        ode = torch.matmul(self.C1, x) + (self.d + (self.A0/self.Q)*torch.cos(self.Om*t) + F/self.k) * self.C2
+        F = self.Fc(x[:, 1:])
+    
+        # The first term is broadcasted matrix multiplication of (1, 2, 2) * (b, 2, 1) = (b, 2, 1), where b = self.batch_size.
+        # The second term is broadcasted matrix multiplication of (1, 2, 1) * (b, 1, 1) = (b, 2, 1)
+        ode = torch.matmul(self.C1, x.unsqueeze(-1)) + torch.matmul(self.C2, (self.d + (self.A0/self.Q)*torch.cos(self.Om*t) + F/self.k).unsqueeze(-1))
 
-        return ode
+        # Squeeze to return a tensor of shape (b, 2)
+        return ode.squeeze(-1)
 
 
 class LightningTrainer(pl.LightningModule):
@@ -236,7 +240,7 @@ class LightningTrainer(pl.LightningModule):
         Learning rate of the model. Default value is 0.01.
     """
 
-    def __init__(self, train_dataset, lr = 0.01, hidden_nodes = [4], batch_size = 1, solver = 'dopri5'):
+    def __init__(self, train_dataset, lr = 0.1, hidden_nodes = [4], batch_size = 1, solver = 'dopri5'):
         """
         Parameters
         ----------
@@ -250,26 +254,29 @@ class LightningTrainer(pl.LightningModule):
         super(LightningTrainer, self).__init__()
         self.train_dataset = train_dataset
         ode_params = self.train_dataset.ode_params
-        self.ODE = AFM_NeuralODE(**ode_params, d = 0, hidden_nodes = hidden_nodes)
+        self.ODE = AFM_NeuralODE(**ode_params, hidden_nodes = hidden_nodes)
         self.batch_size = batch_size
         self.lr = lr
         self.solver = solver
 
     def forward(self, t, x0, d):
-        self.ODE.d = d
+        self.ODE.d = d.view(self.batch_size, 1)
 
         x_pred = odeint(self.ODE, x0, t, method = self.solver)
-        z_pred = x_pred[:,1]
+        # x_pred has shape = [time, batch_size, 2]
+        # Permute z_pred so that it has shape = [batch_size, time]
+        z_pred = x_pred[:,:,1].permute(1,0)
+
 
         return z_pred
 
     def training_step(self, batch, batch_nb):
         t = batch['time'][0].float()
-        x0 = batch['x0'][0].float()
-        d = batch['d'][0]
+        x0 = batch['x0'].float()
+        d = batch['d'].float()
 
         z_pred = self.forward(t, x0, d)
-        z_true = batch['z'][0].float()
+        z_true = batch['z'].float()
 
         log1pI_pred = self.LogSpectra(z_pred)
         log1pI_true = self.LogSpectra(z_true)
