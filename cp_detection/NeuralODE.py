@@ -263,8 +263,7 @@ class LightningTrainer(pl.LightningModule):
         self.ODE.d = d.view(self.batch_size, 1)
 
         x_pred = odeint(self.ODE, x0, t, method = self.solver)
-        # x_pred has shape = [time, batch_size, 2]
-        # Permute z_pred so that it has shape = [batch_size, time]
+        # x_pred has shape = [time, batch_size, 2]. Permute z_pred so that it has shape = [batch_size, time]
         z_pred = x_pred[:,:,1].permute(1,0)
 
 
