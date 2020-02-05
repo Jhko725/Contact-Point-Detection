@@ -98,6 +98,10 @@ class F_cons(nn.Module):
         self.elu = nn.ELU()
         self.tanh = nn.Tanh()
 
+        # Initialize last layer weight and bias to zero tensors
+        nn.init.zeros_(self.layers[-1].weight)
+        nn.init.zeros_(self.layers[-1].bias)
+
     def forward(self, z):
         """
         Returns the neural network output as a function of input z.
@@ -127,6 +131,8 @@ class AFM_NeuralODE(nn.Module):
     A  Pytorch module to create a NeuralODE modeling the AFM tip-sample dynamics.
     Note that all length scales involved in the model are scaled by setting 1[nm] = 1 
     and all timescales scaled to w0*1[s] = 1.
+
+    ...
 
     Attributes
     ----------
@@ -225,39 +231,46 @@ class LightningTrainer(pl.LightningModule):
     ----------
     ODE : An instance of class AFM_NeuralODE
         A NeuralODE model to represent the dynamics between the tip and the sample.
-    train_dataset : An instance of the class GeneralModeDataset
-        A PyTorch dataset of a given general mode approach data to train the NeuralODE in. 
-    A0 : float
-        Free amplitude of the tip at resonance in units of [nm].
-        Follows the definition outlined in M. Lee et. al., Phys. Rev. Lett. 97, 036104 (2006).
-    Om : float
-        Ratio between the resonance frequency f0 and the driving frequency f. Om = f/f0
-    Q : float
-        Q-factor of the cantilever/QTF.
-    k : float
-        Spring constant of the cantilever/QTF in units of [N/m].
-    lr : float
-        Learning rate of the model. Default value is 0.01.
+    hparams : An argparse.Namespace object with fields 'train_dataset', 'hidden_nodes', 'batch_size', 'lr', and 'solver'.
+            Hyperparameters of the model. 
+            'train_dataset' : An instance of the class GeneralModeDataset
+                A PyTorch dataset of a given general mode approach data to train the NeuralODE with. 
+            'hidden nodes' : list or array of integers
+                List of number of nodes in the hidden layers of the model.
+            'batch_size' : integer
+                Batch_size of the model
+            'lr' : float
+                Learning rate
+            'solver' : string, must be compatible with TorchDiffEq.odeint_adjoint
+                Type of ODE solver to be used to solve the NeuralODE
     """
 
-    def __init__(self, train_dataset, lr = 0.1, hidden_nodes = [4], batch_size = 1, solver = 'dopri5'):
+    #def __init__(self, train_dataset, lr = 0.05, hidden_nodes = [10, 10], batch_size = 1, solver = 'dopri5'):
+    def __init__(self, hparams):
         """
         Parameters
         ----------
-        train_dataset : An instance of PyTorch Dataset
-            PyTorch dataset corresponding to the training data
-        hidden_nodes : list of int
-            List of the nodes in each of the hidden layers of the model.
-        lr : float
-            Learning rate of the model. Default value is 0.01.
+        hparams : An argparse.Namespace object with fields 'train_dataset', 'hidden_nodes', 'batch_size', 'lr', and 'solver'.
+            Hyperparameters of the model. 
+            'train_dataset' : An instance of the class GeneralModeDataset
+                A PyTorch dataset of a given general mode approach data to train the NeuralODE with. 
+            'hidden nodes' : list or array of integers
+                List of number of nodes in the hidden layers of the model.
+            'batch_size' : integer
+                Batch_size of the model
+            'lr' : float
+                Learning rate
+            'solver' : string, must be compatible with TorchDiffEq.odeint_adjoint
+                Type of ODE solver to be used to solve the NeuralODE
         """
         super(LightningTrainer, self).__init__()
-        self.train_dataset = train_dataset
+        self.hparams = hparams
+        self.train_dataset = self.hparams.train_dataset
         ode_params = self.train_dataset.ode_params
-        self.ODE = AFM_NeuralODE(**ode_params, hidden_nodes = hidden_nodes)
-        self.batch_size = batch_size
-        self.lr = lr
-        self.solver = solver
+        self.ODE = AFM_NeuralODE(**ode_params, hidden_nodes = self.hparams.hidden_nodes)
+        self.batch_size = self.hparams.batch_size
+        self.lr = self.hparams.lr
+        self.solver = self.hparams.solver
 
     def forward(self, t, x0, d):
         self.ODE.d = d.view(self.batch_size, 1)
@@ -265,7 +278,6 @@ class LightningTrainer(pl.LightningModule):
         x_pred = odeint(self.ODE, x0, t, method = self.solver)
         # x_pred has shape = [time, batch_size, 2]. Permute z_pred so that it has shape = [batch_size, time]
         z_pred = x_pred[:,:,1].permute(1,0)
-
 
         return z_pred
 
@@ -307,13 +319,56 @@ class LightningTrainer(pl.LightningModule):
         """
 
         z_fft = torch.rfft(z, 1)
-        z_I = torch.sum(z_fft**2, dim = -1)
-        z_log1pI = torch.log1p(z_I)
+        #z_I = torch.sum(z_fft**2, dim = -1)
+        z_log1pI = torch.norm(z_fft, p = 2, dim = -1)
+        #z_log1pI = torch.log1p(z_I)
 
         return z_log1pI
 
     def configure_optimizers(self):
         optim = torch.optim.Adam(self.parameters(), lr = self.lr)
-        sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, 'min', 0.5, 100, threshold = 0.05, threshold_mode = 'rel')
-        return [optim], [sched]
+        #sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, 'min', 0.5, 100, threshold = 0.05, threshold_mode = 'rel')
+        #return [optim], [sched]
+        return optim
 
+    def predict_z(self):
+        pass
+
+    def predict_force(self, d):
+        d = np.array(d)
+        d_tensor = torch.from_numpy(d).cuda(non_blocking = True).float().reshape(-1, 1)
+        F_pred = self.ODE.Fc(d_tensor).cpu().detach().numpy()
+        return F_pred
+
+def TrainModel(model, max_epochs = 10000, checkpoint_path = './checkpoints'):
+    """
+    Trains the model using PyTorch_Lightning.trainer. 
+
+    Parameters
+    ----------
+    model : An instance of PyTorch_Lightning.LightningModule
+        Neural network to be trained. 
+    max_epochs : integer
+        Maximum number of training.
+    checkpoint_path : path
+        Path to save the checkpointed model during training.
+    """
+    checkpoint_callback = pl.ModelCheckpoint(filepath = checkpoint_path, save_best_only = True, verbose = True, monitor = 'loss', mode = 'min', prefix = '')
+    trainer = pl.Trainer(gpus = 1, early_stop_callback = None, checkpoint_callback = checkpoint_callback, show_progress_bar = True, max_nb_epochs = max_epochs)
+    trainer.fit(model)
+
+def LoadModel(checkpoint_path):
+    """
+    Loads the checkpointed model from checkpoint_path. 
+
+    Parameters
+    ----------
+    checkpoint_path : path
+        Path to load the checkpointed model from.
+
+    Returns
+    -------
+    loaded_model : An instance of PyTorch_Lightning.LightningModule
+        Loaded neural network.
+    """
+    return LightningTrainer.load_from_checkpoint(checkpoint_path)

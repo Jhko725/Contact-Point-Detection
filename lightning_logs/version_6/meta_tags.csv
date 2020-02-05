@@ -1,1 +1,6 @@
 key,value
+train_dataset,<cp_detection.NeuralODE.GeneralModeDataset object at 0x7fa19c6327d0>
+hidden_nodes,"[10, 10]"
+lr,0.02
+batch_size,40
+solver,dopri5

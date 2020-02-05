@@ -6,3 +6,9 @@ documents:
 
 tensorboard:
 	tensorboard --logdir ./lightning_logs
+
+clear_logs:
+	rm -f ./lightning_logs/*
+
+clear_ckpt:
+	rm -f ./checkpoints/*
