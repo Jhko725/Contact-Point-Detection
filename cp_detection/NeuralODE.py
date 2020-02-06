@@ -98,9 +98,11 @@ class F_cons(nn.Module):
         self.elu = nn.ELU()
         self.tanh = nn.Tanh()
 
-        # Initialize last layer weight and bias to zero tensors
-        nn.init.zeros_(self.layers[-1].weight)
-        nn.init.zeros_(self.layers[-1].bias)
+        # Initialize weights and biases
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.normal_(m.weight, mean=0, std=1.0e-4)
+                nn.init.constant_(m.bias, val=0)
 
     def forward(self, z):
         """
@@ -120,11 +122,11 @@ class F_cons(nn.Module):
         interm = self.layers[0](z)
         
         for layer in self.layers[1:]:
-            interm = self.elu(interm)
+            interm = self.tanh(interm)
             interm = layer(interm)
 
-        F = self.tanh(interm)
-        return F
+        #F = self.tanh(interm)
+        return interm
 
 class AFM_NeuralODE(nn.Module):
     """
