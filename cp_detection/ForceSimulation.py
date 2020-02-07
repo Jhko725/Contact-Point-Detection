@@ -1,5 +1,8 @@
 import numpy as np
 from scipy.integrate import solve_ivp
+import sys
+
+# Later on, create ABCs to wrap AFM model and force models.
 
 class ForcedHarmonicOscillator():
     """
@@ -23,6 +26,9 @@ class ForcedHarmonicOscillator():
     F_int : function
         Tip-sample interaction force. Must accept z and dz/dt as input and return a single float as return value.
         The returned force has dimension of [1e-9N].
+    T : float [dimensionless]
+        Rescaled relaxation time of the cantilever/QTF. 
+        T = 2Q, where 2Q/omega_0 is the true relaxation time.
     """
 
     def __init__(self, Q, k, Om, A0, Fint):
@@ -40,16 +46,13 @@ class ForcedHarmonicOscillator():
         F_int : function
             Tip-sample interaction force. Must accept z and dz/dt as input and return the corresponding tip-sample force.
             The returned force has dimension of [1e-9N].
-        C1 : Numpy array with shape (2, 2)
-            Coefficient matrix for the ode of the form C1 = [[-1./self.Q, -1.], [1., 0.]]
-        C2 : Numpy array with shape (2, 1)
-            Coefficient matrix for the ode of the form C2 = [[1.], [0.]]
         """
         self.Q = Q
         self.k = k
         self.Om = Om
         self.A0 = A0
         self.Fint = Fint
+        self.T = 2*Q
 
     def get_ode(self, d):
         """
@@ -93,7 +96,7 @@ class ForcedHarmonicOscillator():
             Time to evaluate the ode solutions. Must be sorted in increasing order.
         x0 : Numpy array with shape (2, 1)
             Initial value for the state vector. If none is given, x0 = [Om*A0/sqrt(Q^2(1-Om^2)^2 + Om^2), d]. 
-        kwargs : dictionary
+        kwargs : dict
             Keyword arguments for scipy.integrate.solve_ivp.
         """
         if x0 == None:
@@ -166,3 +169,49 @@ class DMT_Maugis():
         F[0, contact] = (4/3)*self.E*np.sqrt(self.R)*(self.z0 - x[1, contact])**1.5 - self.H*self.R/(6*self.z0**2)
 
         return F
+
+def SimulateGeneralMode(AFM, d_array, dt, N_data, relaxation = 7, x0 = None, **kwargs):
+    """
+    Creates the general mode AFM approach curve according to the given AFM model.
+    For each average tip-sample distance d in d_array, the steady state trajectory of the tip is calculated.
+
+    Parameters
+    ----------
+    AFM : an instance of a class modeling the AFM
+        The AFM model to be used in simulating the tip dynamics.
+    d_array : 1D numpy array
+        An array of average tip-sample distances for the approach curve.
+    dt : float
+        Time increment for the cantilever trajectory z(t).
+    N_data : int
+        Number of steady state trajectory data to be generated per average tip-sample distance d.
+    relaxation : int
+        How many multiples of the time constant to be discarded prior to sampling the steady state dynamics.
+    kwargs : dict
+        Keyword arguments for scipy.integrate.solve_ivp.
+    
+    Returns
+    -------
+    t : numpy 1D array
+        Time array used to solve the ode
+    z_array : numpy 2D array with dimensions (len(d_array), N_data)
+        Simulated general mode approach curve data. 
+        Each row corrresponds to data for a given average tip-sample distance d.
+    """
+    # Number of data points needed for relaxation
+    N_relax = np.ceil(AFM.T*relaxation/dt)
+    t = np.arange(N_relax+N_data)*dt
+
+    d_array = np.array(d_array)
+    z_array = np.zeros((d_array.size, N_data))
+
+    sys.stdout.write('Data generation started\n')
+    for i in range(d_array.size):
+        sol = AFM.solve(d_array[i], t, x0 = x0, **kwargs)
+        z_array[i, :] = sol.y[1, -N_data:]
+    
+        sys.stdout.write('\r')
+        sys.stdout.write('{:d}/{:d} generated'.format(i+1, d_array.size))
+        sys.stdout.flush()
+
+    return t, z_array
