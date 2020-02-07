@@ -1,0 +1,784 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
+<meta name="generator" content="pdoc 0.7.2" />
+<title>cp_detection.ForceSimulation API documentation</title>
+<meta name="description" content="" />
+<link href='https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.0/normalize.min.css' rel='stylesheet'>
+<link href='https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/8.0.0/sanitize.min.css' rel='stylesheet'>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css" rel="stylesheet">
+<style>.flex{display:flex !important}body{line-height:1.5em}#content{padding:20px}#sidebar{padding:30px;overflow:hidden}.http-server-breadcrumbs{font-size:130%;margin:0 0 15px 0}#footer{font-size:.75em;padding:5px 30px;border-top:1px solid #ddd;text-align:right}#footer p{margin:0 0 0 1em;display:inline-block}#footer p:last-child{margin-right:30px}h1,h2,h3,h4,h5{font-weight:300}h1{font-size:2.5em;line-height:1.1em}h2{font-size:1.75em;margin:1em 0 .50em 0}h3{font-size:1.4em;margin:25px 0 10px 0}h4{margin:0;font-size:105%}a{color:#058;text-decoration:none;transition:color .3s ease-in-out}a:hover{color:#e82}.title code{font-weight:bold}h2[id^="header-"]{margin-top:2em}.ident{color:#900}pre code{background:#f8f8f8;font-size:.8em;line-height:1.4em}code{background:#f2f2f1;padding:1px 4px;overflow-wrap:break-word}h1 code{background:transparent}pre{background:#f8f8f8;border:0;border-top:1px solid #ccc;border-bottom:1px solid #ccc;margin:1em 0;padding:1ex}#http-server-module-list{display:flex;flex-flow:column}#http-server-module-list div{display:flex}#http-server-module-list dt{min-width:10%}#http-server-module-list p{margin-top:0}.toc ul,#index{list-style-type:none;margin:0;padding:0}#index code{background:transparent}#index h3{border-bottom:1px solid #ddd}#index ul{padding:0}#index h4{font-weight:bold}#index h4 + ul{margin-bottom:.6em}@media (min-width:200ex){#index .two-column{column-count:2}}@media (min-width:300ex){#index .two-column{column-count:3}}dl{margin-bottom:2em}dl dl:last-child{margin-bottom:4em}dd{margin:0 0 1em 3em}#header-classes + dl > dd{margin-bottom:3em}dd dd{margin-left:2em}dd p{margin:10px 0}.name{background:#eee;font-weight:bold;font-size:.85em;padding:5px 10px;display:inline-block;min-width:40%}.name:hover{background:#e0e0e0}.name > span:first-child{white-space:nowrap}.name.class > span:nth-child(2){margin-left:.4em}.inherited{color:#999;border-left:5px solid #eee;padding-left:1em}.inheritance em{font-style:normal;font-weight:bold}.desc h2{font-weight:400;font-size:1.25em}.desc h3{font-size:1em}.desc dt code{background:inherit}.source summary,.git-link-div{color:#666;text-align:right;font-weight:400;font-size:.8em;text-transform:uppercase}.source summary > *{white-space:nowrap;cursor:pointer}.git-link{color:inherit;margin-left:1em}.source pre{max-height:500px;overflow:auto;margin:0}.source pre code{font-size:12px;overflow:visible}.hlist{list-style:none}.hlist li{display:inline}.hlist li:after{content:',\2002'}.hlist li:last-child:after{content:none}.hlist .hlist{display:inline;padding-left:1em}img{max-width:100%}.admonition{padding:.1em .5em;margin-bottom:1em}.admonition-title{font-weight:bold}.admonition.note,.admonition.info,.admonition.important{background:#aef}.admonition.todo,.admonition.versionadded,.admonition.tip,.admonition.hint{background:#dfd}.admonition.warning,.admonition.versionchanged,.admonition.deprecated{background:#fd4}.admonition.error,.admonition.danger,.admonition.caution{background:lightpink}</style>
+<style media="screen and (min-width: 700px)">@media screen and (min-width:700px){#sidebar{width:30%}#content{width:70%;max-width:100ch;padding:3em 4em;border-left:1px solid #ddd}pre code{font-size:1em}.item .name{font-size:1em}main{display:flex;flex-direction:row-reverse;justify-content:flex-end}.toc ul ul,#index ul{padding-left:1.5em}.toc > ul > li{margin-top:.5em}}</style>
+<style media="print">@media print{#sidebar h1{page-break-before:always}.source{display:none}}@media print{*{background:transparent !important;color:#000 !important;box-shadow:none !important;text-shadow:none !important}a[href]:after{content:" (" attr(href) ")";font-size:90%}a[href][title]:after{content:none}abbr[title]:after{content:" (" attr(title) ")"}.ir a:after,a[href^="javascript:"]:after,a[href^="#"]:after{content:""}pre,blockquote{border:1px solid #999;page-break-inside:avoid}thead{display:table-header-group}tr,img{page-break-inside:avoid}img{max-width:100% !important}@page{margin:0.5cm}p,h2,h3{orphans:3;widows:3}h1,h2,h3,h4,h5,h6{page-break-after:avoid}}</style>
+</head>
+<body>
+<main>
+<article id="content">
+<header>
+<h1 class="title">Module <code>cp_detection.ForceSimulation</code></h1>
+</header>
+<section id="section-intro">
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">import numpy as np
+from scipy.integrate import solve_ivp
+import sys
+
+# Later on, create ABCs to wrap AFM model and force models.
+
+class ForcedHarmonicOscillator():
+    &#34;&#34;&#34;
+    A class to model the AFM QTF/cantilever - sample system as a forced harmonic oscillator subject to a sinusodial driving force and a given tip-sample force F_int.
+    Note that in this formulation, rescaled time t_rescaled = omega_0*t is used, and the quantity of interest is the instantaneous tip-sample distance z(t).
+    The exact functional form of the tip-sample force must be given during initialization. 
+    All units used are rescaled so that 1nm = 1
+
+    ...
+
+    Attributes
+    ----------
+    Q : float [dimensionless]
+        Q-factor of the cantilever/QTF.
+    k : float [N/m]
+        Force constant of the cantilever/QTF
+    Om : float [dimensionless]
+        Relative driving frequency of the oscillator - Om = f/f0, where f is the driving freqency and f0 is the resonance frequency
+    A0 : float [nm]
+        Oscillator amplitude at resonance frequency and without tip-sample force F_int applied to the system.
+    F_int : function
+        Tip-sample interaction force. Must accept z and dz/dt as input and return a single float as return value.
+        The returned force has dimension of [1e-9N].
+    T : float [dimensionless]
+        Rescaled relaxation time of the cantilever/QTF. 
+        T = 2Q, where 2Q/omega_0 is the true relaxation time.
+    &#34;&#34;&#34;
+
+    def __init__(self, Q, k, Om, A0, Fint):
+        &#34;&#34;&#34;
+        Parameters
+        ----------
+        Q : float [dimensionless]
+            Q-factor of the cantilever/QTF.
+        k : float [N/m]
+            Force constant of the cantilever/QTF
+        Om : float [dimensionless]
+            Relative driving frequency of the oscillator - Om = f/f0, where f is the driving freqency and f0 is the resonance frequency
+        A0 : float [nm]
+            Oscillator amplitude at resonance frequency and without tip-sample force F_int applied to the system.
+        F_int : function
+            Tip-sample interaction force. Must accept z and dz/dt as input and return the corresponding tip-sample force.
+            The returned force has dimension of [1e-9N].
+        &#34;&#34;&#34;
+        self.Q = Q
+        self.k = k
+        self.Om = Om
+        self.A0 = A0
+        self.Fint = Fint
+        self.T = 2*Q
+
+    def get_ode(self, d):
+        &#34;&#34;&#34;
+        Returns the corresponding ode function of the model. 
+        x is a state vector, where each column corresponds to the form x = [y, z]&#39;, where y = dz/dt. 
+        t is the rescaled time of the form t_rescaled = t_true * omega_0.
+
+        Parameters
+        ----------
+        t : float [dimensionless]
+            Rescaled time, given by t_rescaled = t_true * omega_0, where omega_0 is the angular resonance frequency.
+        x : Numpy array with shape (2, k)
+            State vector, where each column corresponds to the form x = [y, z]&#39;, where y = dz/dt. 
+            k is the number of different x vectors in a single batch.
+        d : float [nm]
+            Average tip-sample distance.
+
+        Returns
+        -------
+        dxdt : Numpy array with shape (2, k)
+            State vector, where each column corresponds to the form dxdt = [dydt, dzdt]&#39;
+        &#34;&#34;&#34;
+        C1 = np.array([[-1./self.Q, -1.], [1., 0.]])
+        C2 = np.array([[1.], [0.]])
+        
+        def ode(t, x): 
+            F = self.Fint(x)
+            dxdt = np.matmul(C1, x) + np.matmul(C2, (d+(self.A0/self.Q)*np.cos(self.Om*t)+F/self.k))
+            return dxdt
+        return ode
+
+    def solve(self, d, t, x0 = None, **kwargs):
+        &#34;&#34;&#34;
+        Solves the ode and returns the solution.
+
+        Parameters
+        ----------
+        d : float [nm]
+            Average tip-sample distance.
+        t : 1D numpy array
+            Time to evaluate the ode solutions. Must be sorted in increasing order.
+        x0 : Numpy array with shape (2, 1)
+            Initial value for the state vector. If none is given, x0 = [Om*A0/sqrt(Q^2(1-Om^2)^2 + Om^2), d]. 
+        kwargs : dict
+            Keyword arguments for scipy.integrate.solve_ivp.
+        &#34;&#34;&#34;
+        if x0 == None:
+            x0 = np.array([self.Om*self.A0/np.sqrt(self.Q**2*(1-self.Om**2)**2 + self.Om**2), d])
+        sol = solve_ivp(self.get_ode(d), (t[0], t[-1]), x0, t_eval = t, vectorized = True, **kwargs)
+
+        return sol
+
+class DMT_Maugis():
+    &#34;&#34;&#34;
+    Models the tip-sample interaction according to Maugis&#39; approximation to the Derjaguin-Muller-Toporov (a.k.a. Hertz-plus-offset model).
+    
+    ...
+
+    Attributes
+    ----------
+    H : float [1e-18 J]
+        Hamaker constant of the tip-sample Van-der-Waals interaction.
+    R : float [nm]
+        Radius of the tip, which is assumed to be spherical.
+    z0 : float [nm]
+        Distance at which contact is established.
+    E : float [GPa]
+        Effective Young&#39;s modulus between the tip and the sample.
+    &#34;&#34;&#34;
+
+    def __init__(self, H, R, z0, Et, Es, vt, vs):
+        &#34;&#34;&#34;
+        Parameters
+        ----------
+        H : float [1e-18 J]
+            Hamaker constant of the tip-sample Van-der-Waals interaction.
+        R : float [nm]
+            Radius of the tip, which is assumed to be spherical.
+        z0 : float [nm]
+            Distance at which contact is established.
+        Et : float [GPa]
+            Young&#39;s modulus of the tip.
+        Es : float [GPa]
+            Young&#39;s modulus of the sample.
+        vt : float [dimensionless]
+            Poisson ratio of the tip.
+        vs : float [dimensionless]
+            Poisson ratio of the sample.
+        &#34;&#34;&#34;
+        self.H = H
+        self.R = R
+        self.z0 = z0
+        self.E = 1/((1-vt**2)/Et + (1-vs**2)/Es)
+        
+    def F(self, x):
+        &#34;&#34;&#34;
+        Computes the force corresponding to the given force model.
+
+        Parameters
+        ----------
+        x : Numpy array with shape (2, k)
+            State vector, where each column corresponds to the form x = [y, z]&#39;, where y = dz/dt. 
+            k is the number of different x vectors in a single batch.
+
+        Returns
+        -------
+        F : Numpy array with shape (1, k)
+            Force corresponding to state vectors in each columns of the input x.
+        &#34;&#34;&#34;
+        F = np.zeros((1, x.shape[-1]))
+        # Column indices of state vectors that fulfill the condition z&lt;z0
+        contact = x[1, :]&lt;self.z0
+        F[0, ~contact] = -self.H*self.R/(6*x[1, ~contact]**2)
+        F[0, contact] = (4/3)*self.E*np.sqrt(self.R)*(self.z0 - x[1, contact])**1.5 - self.H*self.R/(6*self.z0**2)
+
+        return F
+
+def SimulateGeneralMode(AFM, d_array, dt, N_data, relaxation = 7, x0 = None, **kwargs):
+    &#34;&#34;&#34;
+    Creates the general mode AFM approach curve according to the given AFM model.
+    For each average tip-sample distance d in d_array, the steady state trajectory of the tip is calculated.
+
+    Parameters
+    ----------
+    AFM : an instance of a class modeling the AFM
+        The AFM model to be used in simulating the tip dynamics.
+    d_array : 1D numpy array
+        An array of average tip-sample distances for the approach curve.
+    dt : float
+        Time increment for the cantilever trajectory z(t).
+    N_data : int
+        Number of steady state trajectory data to be generated per average tip-sample distance d.
+    relaxation : int
+        How many multiples of the time constant to be discarded prior to sampling the steady state dynamics.
+    kwargs : dict
+        Keyword arguments for scipy.integrate.solve_ivp.
+    
+    Returns
+    -------
+    t : numpy 1D array
+        Time array used to solve the ode
+    z_array : numpy 2D array with dimensions (len(d_array), N_data)
+        Simulated general mode approach curve data. 
+        Each row corrresponds to data for a given average tip-sample distance d.
+    &#34;&#34;&#34;
+    # Number of data points needed for relaxation
+    N_relax = np.ceil(AFM.T*relaxation/dt)
+    t = np.arange(N_relax+N_data)*dt
+
+    d_array = np.array(d_array)
+    z_array = np.zeros((d_array.size, N_data))
+
+    sys.stdout.write(&#39;Data generation started\n&#39;)
+    for i in range(d_array.size):
+        sol = AFM.solve(d_array[i], t, x0 = x0, **kwargs)
+        z_array[i, :] = sol.y[1, -N_data:]
+    
+        sys.stdout.write(&#39;\r&#39;)
+        sys.stdout.write(&#39;{:d}/{:d} generated&#39;.format(i+1, d_array.size))
+        sys.stdout.flush()
+
+    return t, z_array</code></pre>
+</details>
+</section>
+<section>
+</section>
+<section>
+</section>
+<section>
+<h2 class="section-title" id="header-functions">Functions</h2>
+<dl>
+<dt id="cp_detection.ForceSimulation.SimulateGeneralMode"><code class="name flex">
+<span>def <span class="ident">SimulateGeneralMode</span></span>(<span>AFM, d_array, dt, N_data, relaxation=7, x0=None, **kwargs)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Creates the general mode AFM approach curve according to the given AFM model.
+For each average tip-sample distance d in d_array, the steady state trajectory of the tip is calculated.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>AFM</code></strong> :&ensp;<code>an</code> <code>instance</code> of <code>a</code> <code>class</code> <code>modeling</code> <code>the</code> <code>AFM</code></dt>
+<dd>The AFM model to be used in simulating the tip dynamics.</dd>
+<dt><strong><code>d_array</code></strong> :&ensp;<code>1D</code> <code>numpy</code> <code>array</code></dt>
+<dd>An array of average tip-sample distances for the approach curve.</dd>
+<dt><strong><code>dt</code></strong> :&ensp;<code>float</code></dt>
+<dd>Time increment for the cantilever trajectory z(t).</dd>
+<dt><strong><code>N_data</code></strong> :&ensp;<code>int</code></dt>
+<dd>Number of steady state trajectory data to be generated per average tip-sample distance d.</dd>
+<dt><strong><code>relaxation</code></strong> :&ensp;<code>int</code></dt>
+<dd>How many multiples of the time constant to be discarded prior to sampling the steady state dynamics.</dd>
+<dt><strong><code>kwargs</code></strong> :&ensp;<code>dict</code></dt>
+<dd>Keyword arguments for scipy.integrate.solve_ivp.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>t</code></strong> :&ensp;<code>numpy</code> <code>1D</code> <code>array</code></dt>
+<dd>Time array used to solve the ode</dd>
+<dt><strong><code>z_array</code></strong> :&ensp;<code>numpy</code> <code>2D</code> <code>array</code> <code>with</code> <code>dimensions</code> (<code>len</code>(<code>d_array</code>), <code>N_data</code>)</dt>
+<dd>Simulated general mode approach curve data.
+Each row corrresponds to data for a given average tip-sample distance d.</dd>
+</dl></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def SimulateGeneralMode(AFM, d_array, dt, N_data, relaxation = 7, x0 = None, **kwargs):
+    &#34;&#34;&#34;
+    Creates the general mode AFM approach curve according to the given AFM model.
+    For each average tip-sample distance d in d_array, the steady state trajectory of the tip is calculated.
+
+    Parameters
+    ----------
+    AFM : an instance of a class modeling the AFM
+        The AFM model to be used in simulating the tip dynamics.
+    d_array : 1D numpy array
+        An array of average tip-sample distances for the approach curve.
+    dt : float
+        Time increment for the cantilever trajectory z(t).
+    N_data : int
+        Number of steady state trajectory data to be generated per average tip-sample distance d.
+    relaxation : int
+        How many multiples of the time constant to be discarded prior to sampling the steady state dynamics.
+    kwargs : dict
+        Keyword arguments for scipy.integrate.solve_ivp.
+    
+    Returns
+    -------
+    t : numpy 1D array
+        Time array used to solve the ode
+    z_array : numpy 2D array with dimensions (len(d_array), N_data)
+        Simulated general mode approach curve data. 
+        Each row corrresponds to data for a given average tip-sample distance d.
+    &#34;&#34;&#34;
+    # Number of data points needed for relaxation
+    N_relax = np.ceil(AFM.T*relaxation/dt)
+    t = np.arange(N_relax+N_data)*dt
+
+    d_array = np.array(d_array)
+    z_array = np.zeros((d_array.size, N_data))
+
+    sys.stdout.write(&#39;Data generation started\n&#39;)
+    for i in range(d_array.size):
+        sol = AFM.solve(d_array[i], t, x0 = x0, **kwargs)
+        z_array[i, :] = sol.y[1, -N_data:]
+    
+        sys.stdout.write(&#39;\r&#39;)
+        sys.stdout.write(&#39;{:d}/{:d} generated&#39;.format(i+1, d_array.size))
+        sys.stdout.flush()
+
+    return t, z_array</code></pre>
+</details>
+</dd>
+</dl>
+</section>
+<section>
+<h2 class="section-title" id="header-classes">Classes</h2>
+<dl>
+<dt id="cp_detection.ForceSimulation.DMT_Maugis"><code class="flex name class">
+<span>class <span class="ident">DMT_Maugis</span></span>
+<span>(</span><span>H, R, z0, Et, Es, vt, vs)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Models the tip-sample interaction according to Maugis' approximation to the Derjaguin-Muller-Toporov (a.k.a. Hertz-plus-offset model).</p>
+<p>&hellip;</p>
+<h2 id="attributes">Attributes</h2>
+<dl>
+<dt><strong><code>H</code></strong> :&ensp;<code>float</code> [<code>1e</code>-<code>18</code> <code>J</code>]</dt>
+<dd>Hamaker constant of the tip-sample Van-der-Waals interaction.</dd>
+<dt><strong><code>R</code></strong> :&ensp;<code>float</code> [<code>nm</code>]</dt>
+<dd>Radius of the tip, which is assumed to be spherical.</dd>
+<dt><strong><code>z0</code></strong> :&ensp;<code>float</code> [<code>nm</code>]</dt>
+<dd>Distance at which contact is established.</dd>
+<dt><strong><code>E</code></strong> :&ensp;<code>float</code> [<code>GPa</code>]</dt>
+<dd>Effective Young's modulus between the tip and the sample.</dd>
+</dl>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>H</code></strong> :&ensp;<code>float</code> [<code>1e</code>-<code>18</code> <code>J</code>]</dt>
+<dd>Hamaker constant of the tip-sample Van-der-Waals interaction.</dd>
+<dt><strong><code>R</code></strong> :&ensp;<code>float</code> [<code>nm</code>]</dt>
+<dd>Radius of the tip, which is assumed to be spherical.</dd>
+<dt><strong><code>z0</code></strong> :&ensp;<code>float</code> [<code>nm</code>]</dt>
+<dd>Distance at which contact is established.</dd>
+<dt><strong><code>Et</code></strong> :&ensp;<code>float</code> [<code>GPa</code>]</dt>
+<dd>Young's modulus of the tip.</dd>
+<dt><strong><code>Es</code></strong> :&ensp;<code>float</code> [<code>GPa</code>]</dt>
+<dd>Young's modulus of the sample.</dd>
+<dt><strong><code>vt</code></strong> :&ensp;<code>float</code> [<code>dimensionless</code>]</dt>
+<dd>Poisson ratio of the tip.</dd>
+<dt><strong><code>vs</code></strong> :&ensp;<code>float</code> [<code>dimensionless</code>]</dt>
+<dd>Poisson ratio of the sample.</dd>
+</dl></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class DMT_Maugis():
+    &#34;&#34;&#34;
+    Models the tip-sample interaction according to Maugis&#39; approximation to the Derjaguin-Muller-Toporov (a.k.a. Hertz-plus-offset model).
+    
+    ...
+
+    Attributes
+    ----------
+    H : float [1e-18 J]
+        Hamaker constant of the tip-sample Van-der-Waals interaction.
+    R : float [nm]
+        Radius of the tip, which is assumed to be spherical.
+    z0 : float [nm]
+        Distance at which contact is established.
+    E : float [GPa]
+        Effective Young&#39;s modulus between the tip and the sample.
+    &#34;&#34;&#34;
+
+    def __init__(self, H, R, z0, Et, Es, vt, vs):
+        &#34;&#34;&#34;
+        Parameters
+        ----------
+        H : float [1e-18 J]
+            Hamaker constant of the tip-sample Van-der-Waals interaction.
+        R : float [nm]
+            Radius of the tip, which is assumed to be spherical.
+        z0 : float [nm]
+            Distance at which contact is established.
+        Et : float [GPa]
+            Young&#39;s modulus of the tip.
+        Es : float [GPa]
+            Young&#39;s modulus of the sample.
+        vt : float [dimensionless]
+            Poisson ratio of the tip.
+        vs : float [dimensionless]
+            Poisson ratio of the sample.
+        &#34;&#34;&#34;
+        self.H = H
+        self.R = R
+        self.z0 = z0
+        self.E = 1/((1-vt**2)/Et + (1-vs**2)/Es)
+        
+    def F(self, x):
+        &#34;&#34;&#34;
+        Computes the force corresponding to the given force model.
+
+        Parameters
+        ----------
+        x : Numpy array with shape (2, k)
+            State vector, where each column corresponds to the form x = [y, z]&#39;, where y = dz/dt. 
+            k is the number of different x vectors in a single batch.
+
+        Returns
+        -------
+        F : Numpy array with shape (1, k)
+            Force corresponding to state vectors in each columns of the input x.
+        &#34;&#34;&#34;
+        F = np.zeros((1, x.shape[-1]))
+        # Column indices of state vectors that fulfill the condition z&lt;z0
+        contact = x[1, :]&lt;self.z0
+        F[0, ~contact] = -self.H*self.R/(6*x[1, ~contact]**2)
+        F[0, contact] = (4/3)*self.E*np.sqrt(self.R)*(self.z0 - x[1, contact])**1.5 - self.H*self.R/(6*self.z0**2)
+
+        return F</code></pre>
+</details>
+<h3>Methods</h3>
+<dl>
+<dt id="cp_detection.ForceSimulation.DMT_Maugis.F"><code class="name flex">
+<span>def <span class="ident">F</span></span>(<span>self, x)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Computes the force corresponding to the given force model.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>x</code></strong> :&ensp;<code>Numpy</code> <code>array</code> <code>with</code> <code>shape</code> (<code>2</code>, <code>k</code>)</dt>
+<dd>State vector, where each column corresponds to the form x = [y, z]', where y = dz/dt.
+k is the number of different x vectors in a single batch.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>F</code></strong> :&ensp;<code>Numpy</code> <code>array</code> <code>with</code> <code>shape</code> (<code>1</code>, <code>k</code>)</dt>
+<dd>Force corresponding to state vectors in each columns of the input x.</dd>
+</dl></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def F(self, x):
+    &#34;&#34;&#34;
+    Computes the force corresponding to the given force model.
+
+    Parameters
+    ----------
+    x : Numpy array with shape (2, k)
+        State vector, where each column corresponds to the form x = [y, z]&#39;, where y = dz/dt. 
+        k is the number of different x vectors in a single batch.
+
+    Returns
+    -------
+    F : Numpy array with shape (1, k)
+        Force corresponding to state vectors in each columns of the input x.
+    &#34;&#34;&#34;
+    F = np.zeros((1, x.shape[-1]))
+    # Column indices of state vectors that fulfill the condition z&lt;z0
+    contact = x[1, :]&lt;self.z0
+    F[0, ~contact] = -self.H*self.R/(6*x[1, ~contact]**2)
+    F[0, contact] = (4/3)*self.E*np.sqrt(self.R)*(self.z0 - x[1, contact])**1.5 - self.H*self.R/(6*self.z0**2)
+
+    return F</code></pre>
+</details>
+</dd>
+</dl>
+</dd>
+<dt id="cp_detection.ForceSimulation.ForcedHarmonicOscillator"><code class="flex name class">
+<span>class <span class="ident">ForcedHarmonicOscillator</span></span>
+<span>(</span><span>Q, k, Om, A0, Fint)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>A class to model the AFM QTF/cantilever - sample system as a forced harmonic oscillator subject to a sinusodial driving force and a given tip-sample force F_int.
+Note that in this formulation, rescaled time t_rescaled = omega_0*t is used, and the quantity of interest is the instantaneous tip-sample distance z(t).
+The exact functional form of the tip-sample force must be given during initialization.
+All units used are rescaled so that 1nm = 1</p>
+<p>&hellip;</p>
+<h2 id="attributes">Attributes</h2>
+<dl>
+<dt><strong><code>Q</code></strong> :&ensp;<code>float</code> [<code>dimensionless</code>]</dt>
+<dd>Q-factor of the cantilever/QTF.</dd>
+<dt><strong><code>k</code></strong> :&ensp;<code>float</code> [<code>N</code>/<code>m</code>]</dt>
+<dd>Force constant of the cantilever/QTF</dd>
+<dt><strong><code>Om</code></strong> :&ensp;<code>float</code> [<code>dimensionless</code>]</dt>
+<dd>Relative driving frequency of the oscillator - Om = f/f0, where f is the driving freqency and f0 is the resonance frequency</dd>
+<dt><strong><code>A0</code></strong> :&ensp;<code>float</code> [<code>nm</code>]</dt>
+<dd>Oscillator amplitude at resonance frequency and without tip-sample force F_int applied to the system.</dd>
+<dt><strong><code>F_int</code></strong> :&ensp;<code>function</code></dt>
+<dd>Tip-sample interaction force. Must accept z and dz/dt as input and return a single float as return value.
+The returned force has dimension of [1e-9N].</dd>
+<dt><strong><code>T</code></strong> :&ensp;<code>float</code> [<code>dimensionless</code>]</dt>
+<dd>Rescaled relaxation time of the cantilever/QTF.
+T = 2Q, where 2Q/omega_0 is the true relaxation time.</dd>
+</dl>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>Q</code></strong> :&ensp;<code>float</code> [<code>dimensionless</code>]</dt>
+<dd>Q-factor of the cantilever/QTF.</dd>
+<dt><strong><code>k</code></strong> :&ensp;<code>float</code> [<code>N</code>/<code>m</code>]</dt>
+<dd>Force constant of the cantilever/QTF</dd>
+<dt><strong><code>Om</code></strong> :&ensp;<code>float</code> [<code>dimensionless</code>]</dt>
+<dd>Relative driving frequency of the oscillator - Om = f/f0, where f is the driving freqency and f0 is the resonance frequency</dd>
+<dt><strong><code>A0</code></strong> :&ensp;<code>float</code> [<code>nm</code>]</dt>
+<dd>Oscillator amplitude at resonance frequency and without tip-sample force F_int applied to the system.</dd>
+<dt><strong><code>F_int</code></strong> :&ensp;<code>function</code></dt>
+<dd>Tip-sample interaction force. Must accept z and dz/dt as input and return the corresponding tip-sample force.
+The returned force has dimension of [1e-9N].</dd>
+</dl></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class ForcedHarmonicOscillator():
+    &#34;&#34;&#34;
+    A class to model the AFM QTF/cantilever - sample system as a forced harmonic oscillator subject to a sinusodial driving force and a given tip-sample force F_int.
+    Note that in this formulation, rescaled time t_rescaled = omega_0*t is used, and the quantity of interest is the instantaneous tip-sample distance z(t).
+    The exact functional form of the tip-sample force must be given during initialization. 
+    All units used are rescaled so that 1nm = 1
+
+    ...
+
+    Attributes
+    ----------
+    Q : float [dimensionless]
+        Q-factor of the cantilever/QTF.
+    k : float [N/m]
+        Force constant of the cantilever/QTF
+    Om : float [dimensionless]
+        Relative driving frequency of the oscillator - Om = f/f0, where f is the driving freqency and f0 is the resonance frequency
+    A0 : float [nm]
+        Oscillator amplitude at resonance frequency and without tip-sample force F_int applied to the system.
+    F_int : function
+        Tip-sample interaction force. Must accept z and dz/dt as input and return a single float as return value.
+        The returned force has dimension of [1e-9N].
+    T : float [dimensionless]
+        Rescaled relaxation time of the cantilever/QTF. 
+        T = 2Q, where 2Q/omega_0 is the true relaxation time.
+    &#34;&#34;&#34;
+
+    def __init__(self, Q, k, Om, A0, Fint):
+        &#34;&#34;&#34;
+        Parameters
+        ----------
+        Q : float [dimensionless]
+            Q-factor of the cantilever/QTF.
+        k : float [N/m]
+            Force constant of the cantilever/QTF
+        Om : float [dimensionless]
+            Relative driving frequency of the oscillator - Om = f/f0, where f is the driving freqency and f0 is the resonance frequency
+        A0 : float [nm]
+            Oscillator amplitude at resonance frequency and without tip-sample force F_int applied to the system.
+        F_int : function
+            Tip-sample interaction force. Must accept z and dz/dt as input and return the corresponding tip-sample force.
+            The returned force has dimension of [1e-9N].
+        &#34;&#34;&#34;
+        self.Q = Q
+        self.k = k
+        self.Om = Om
+        self.A0 = A0
+        self.Fint = Fint
+        self.T = 2*Q
+
+    def get_ode(self, d):
+        &#34;&#34;&#34;
+        Returns the corresponding ode function of the model. 
+        x is a state vector, where each column corresponds to the form x = [y, z]&#39;, where y = dz/dt. 
+        t is the rescaled time of the form t_rescaled = t_true * omega_0.
+
+        Parameters
+        ----------
+        t : float [dimensionless]
+            Rescaled time, given by t_rescaled = t_true * omega_0, where omega_0 is the angular resonance frequency.
+        x : Numpy array with shape (2, k)
+            State vector, where each column corresponds to the form x = [y, z]&#39;, where y = dz/dt. 
+            k is the number of different x vectors in a single batch.
+        d : float [nm]
+            Average tip-sample distance.
+
+        Returns
+        -------
+        dxdt : Numpy array with shape (2, k)
+            State vector, where each column corresponds to the form dxdt = [dydt, dzdt]&#39;
+        &#34;&#34;&#34;
+        C1 = np.array([[-1./self.Q, -1.], [1., 0.]])
+        C2 = np.array([[1.], [0.]])
+        
+        def ode(t, x): 
+            F = self.Fint(x)
+            dxdt = np.matmul(C1, x) + np.matmul(C2, (d+(self.A0/self.Q)*np.cos(self.Om*t)+F/self.k))
+            return dxdt
+        return ode
+
+    def solve(self, d, t, x0 = None, **kwargs):
+        &#34;&#34;&#34;
+        Solves the ode and returns the solution.
+
+        Parameters
+        ----------
+        d : float [nm]
+            Average tip-sample distance.
+        t : 1D numpy array
+            Time to evaluate the ode solutions. Must be sorted in increasing order.
+        x0 : Numpy array with shape (2, 1)
+            Initial value for the state vector. If none is given, x0 = [Om*A0/sqrt(Q^2(1-Om^2)^2 + Om^2), d]. 
+        kwargs : dict
+            Keyword arguments for scipy.integrate.solve_ivp.
+        &#34;&#34;&#34;
+        if x0 == None:
+            x0 = np.array([self.Om*self.A0/np.sqrt(self.Q**2*(1-self.Om**2)**2 + self.Om**2), d])
+        sol = solve_ivp(self.get_ode(d), (t[0], t[-1]), x0, t_eval = t, vectorized = True, **kwargs)
+
+        return sol</code></pre>
+</details>
+<h3>Methods</h3>
+<dl>
+<dt id="cp_detection.ForceSimulation.ForcedHarmonicOscillator.get_ode"><code class="name flex">
+<span>def <span class="ident">get_ode</span></span>(<span>self, d)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Returns the corresponding ode function of the model.
+x is a state vector, where each column corresponds to the form x = [y, z]', where y = dz/dt.
+t is the rescaled time of the form t_rescaled = t_true * omega_0.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>t</code></strong> :&ensp;<code>float</code> [<code>dimensionless</code>]</dt>
+<dd>Rescaled time, given by t_rescaled = t_true * omega_0, where omega_0 is the angular resonance frequency.</dd>
+<dt><strong><code>x</code></strong> :&ensp;<code>Numpy</code> <code>array</code> <code>with</code> <code>shape</code> (<code>2</code>, <code>k</code>)</dt>
+<dd>State vector, where each column corresponds to the form x = [y, z]', where y = dz/dt.
+k is the number of different x vectors in a single batch.</dd>
+<dt><strong><code>d</code></strong> :&ensp;<code>float</code> [<code>nm</code>]</dt>
+<dd>Average tip-sample distance.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>dxdt</code></strong> :&ensp;<code>Numpy</code> <code>array</code> <code>with</code> <code>shape</code> (<code>2</code>, <code>k</code>)</dt>
+<dd>State vector, where each column corresponds to the form dxdt = [dydt, dzdt]'</dd>
+</dl></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def get_ode(self, d):
+    &#34;&#34;&#34;
+    Returns the corresponding ode function of the model. 
+    x is a state vector, where each column corresponds to the form x = [y, z]&#39;, where y = dz/dt. 
+    t is the rescaled time of the form t_rescaled = t_true * omega_0.
+
+    Parameters
+    ----------
+    t : float [dimensionless]
+        Rescaled time, given by t_rescaled = t_true * omega_0, where omega_0 is the angular resonance frequency.
+    x : Numpy array with shape (2, k)
+        State vector, where each column corresponds to the form x = [y, z]&#39;, where y = dz/dt. 
+        k is the number of different x vectors in a single batch.
+    d : float [nm]
+        Average tip-sample distance.
+
+    Returns
+    -------
+    dxdt : Numpy array with shape (2, k)
+        State vector, where each column corresponds to the form dxdt = [dydt, dzdt]&#39;
+    &#34;&#34;&#34;
+    C1 = np.array([[-1./self.Q, -1.], [1., 0.]])
+    C2 = np.array([[1.], [0.]])
+    
+    def ode(t, x): 
+        F = self.Fint(x)
+        dxdt = np.matmul(C1, x) + np.matmul(C2, (d+(self.A0/self.Q)*np.cos(self.Om*t)+F/self.k))
+        return dxdt
+    return ode</code></pre>
+</details>
+</dd>
+<dt id="cp_detection.ForceSimulation.ForcedHarmonicOscillator.solve"><code class="name flex">
+<span>def <span class="ident">solve</span></span>(<span>self, d, t, x0=None, **kwargs)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Solves the ode and returns the solution.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>d</code></strong> :&ensp;<code>float</code> [<code>nm</code>]</dt>
+<dd>Average tip-sample distance.</dd>
+<dt><strong><code>t</code></strong> :&ensp;<code>1D</code> <code>numpy</code> <code>array</code></dt>
+<dd>Time to evaluate the ode solutions. Must be sorted in increasing order.</dd>
+<dt><strong><code>x0</code></strong> :&ensp;<code>Numpy</code> <code>array</code> <code>with</code> <code>shape</code> (<code>2</code>, <code>1</code>)</dt>
+<dd>Initial value for the state vector. If none is given, x0 = [Om*A0/sqrt(Q^2(1-Om^2)^2 + Om^2), d].</dd>
+<dt><strong><code>kwargs</code></strong> :&ensp;<code>dict</code></dt>
+<dd>Keyword arguments for scipy.integrate.solve_ivp.</dd>
+</dl></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def solve(self, d, t, x0 = None, **kwargs):
+    &#34;&#34;&#34;
+    Solves the ode and returns the solution.
+
+    Parameters
+    ----------
+    d : float [nm]
+        Average tip-sample distance.
+    t : 1D numpy array
+        Time to evaluate the ode solutions. Must be sorted in increasing order.
+    x0 : Numpy array with shape (2, 1)
+        Initial value for the state vector. If none is given, x0 = [Om*A0/sqrt(Q^2(1-Om^2)^2 + Om^2), d]. 
+    kwargs : dict
+        Keyword arguments for scipy.integrate.solve_ivp.
+    &#34;&#34;&#34;
+    if x0 == None:
+        x0 = np.array([self.Om*self.A0/np.sqrt(self.Q**2*(1-self.Om**2)**2 + self.Om**2), d])
+    sol = solve_ivp(self.get_ode(d), (t[0], t[-1]), x0, t_eval = t, vectorized = True, **kwargs)
+
+    return sol</code></pre>
+</details>
+</dd>
+</dl>
+</dd>
+</dl>
+</section>
+</article>
+<nav id="sidebar">
+<h1>Index</h1>
+<div class="toc">
+<ul></ul>
+</div>
+<ul id="index">
+<li><h3>Super-module</h3>
+<ul>
+<li><code><a title="cp_detection" href="index.html">cp_detection</a></code></li>
+</ul>
+</li>
+<li><h3><a href="#header-functions">Functions</a></h3>
+<ul class="">
+<li><code><a title="cp_detection.ForceSimulation.SimulateGeneralMode" href="#cp_detection.ForceSimulation.SimulateGeneralMode">SimulateGeneralMode</a></code></li>
+</ul>
+</li>
+<li><h3><a href="#header-classes">Classes</a></h3>
+<ul>
+<li>
+<h4><code><a title="cp_detection.ForceSimulation.DMT_Maugis" href="#cp_detection.ForceSimulation.DMT_Maugis">DMT_Maugis</a></code></h4>
+<ul class="">
+<li><code><a title="cp_detection.ForceSimulation.DMT_Maugis.F" href="#cp_detection.ForceSimulation.DMT_Maugis.F">F</a></code></li>
+</ul>
+</li>
+<li>
+<h4><code><a title="cp_detection.ForceSimulation.ForcedHarmonicOscillator" href="#cp_detection.ForceSimulation.ForcedHarmonicOscillator">ForcedHarmonicOscillator</a></code></h4>
+<ul class="">
+<li><code><a title="cp_detection.ForceSimulation.ForcedHarmonicOscillator.get_ode" href="#cp_detection.ForceSimulation.ForcedHarmonicOscillator.get_ode">get_ode</a></code></li>
+<li><code><a title="cp_detection.ForceSimulation.ForcedHarmonicOscillator.solve" href="#cp_detection.ForceSimulation.ForcedHarmonicOscillator.solve">solve</a></code></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</nav>
+</main>
+<footer id="footer">
+<p>Generated by <a href="https://pdoc3.github.io/pdoc"><cite>pdoc</cite> 0.7.2</a>.</p>
+</footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+<script>hljs.initHighlightingOnLoad()</script>
+</body>
+</html>

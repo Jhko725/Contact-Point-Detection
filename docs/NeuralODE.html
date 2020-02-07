@@ -124,35 +124,43 @@ class F_cons(nn.Module):
         self.elu = nn.ELU()
         self.tanh = nn.Tanh()
 
+        # Initialize weights and biases
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.normal_(m.weight, mean=0, std=1.0e-4)
+                nn.init.constant_(m.bias, val=0)
+
     def forward(self, z):
         &#34;&#34;&#34;
         Returns the neural network output as a function of input z.
-        z is assumed to be a tensor with size [1].
+        z is assumed to be a tensor with size [batch_size, 1].
 
         Parameters
         ----------
-        z : tensor with size [1].
+        z : tensor with dimensions [batch_size, 1].
             Neural network input. Represents the instantaneous tip-sample distance.
 
         Returns
         -------
-        F : tensor with size [1].
+        F : tensor with dimensions [batch_size, 1].
             Neural network output. Represents the modeled tip-sample force.
         &#34;&#34;&#34;
         interm = self.layers[0](z)
         
         for layer in self.layers[1:]:
-            interm = self.elu(interm)
+            interm = self.tanh(interm)
             interm = layer(interm)
 
-        F = self.tanh(interm)
-        return F
+        #F = self.tanh(interm)
+        return interm
 
 class AFM_NeuralODE(nn.Module):
     &#34;&#34;&#34;
     A  Pytorch module to create a NeuralODE modeling the AFM tip-sample dynamics.
     Note that all length scales involved in the model are scaled by setting 1[nm] = 1 
     and all timescales scaled to w0*1[s] = 1.
+
+    ...
 
     Attributes
     ----------
@@ -179,7 +187,7 @@ class AFM_NeuralODE(nn.Module):
         x is a length 2 vector of the form x = [y, z], where y = dz/dt 
     &#34;&#34;&#34;
 
-    def __init__(self, A0, Om, Q, k, d = 0., hidden_nodes = [4]):
+    def __init__(self, A0, Om, Q, k, hidden_nodes = [4]):
         &#34;&#34;&#34;
         Parameters
         ----------
@@ -194,47 +202,51 @@ class AFM_NeuralODE(nn.Module):
             Q-factor of the cantilever/QTF.
         k : float
             Spring constant of the cantilever/QTF in units of [N/m].
-        d : float
-            Mean tip-sample distance in units of [nm]. Default value is 0.
+        d : PyTorch tensor with dimensions [batch_size, 1]
+            Batched mean tip-sample distance in units of [nm]. Initialized to None.
         &#34;&#34;&#34;
         super(AFM_NeuralODE, self).__init__()
         self.Fc = F_cons(hidden_nodes)
         self.nfe = 0
 
-        self.d = d
+        self.d = None
         self.A0 = A0
         self.Om = Om
         self.Q = Q
         self.k = k
 
         # Constant tensors to be used in the model
-        self.C1 = torch.tensor([[-1./self.Q, -1.], [1., 0.]], device = torch.device(&#34;cuda&#34;))
-        self.C2 = torch.tensor([1.,0.], device = torch.device(&#34;cuda&#34;))
+        self.C1 = torch.tensor([[-1./self.Q, -1.], [1., 0.]], device = torch.device(&#34;cuda&#34;)).unsqueeze(0) # Has size = (1, 2, 2)
+        self.C2 = torch.tensor([[1.],[0.]], device = torch.device(&#34;cuda&#34;)).unsqueeze(0) # Has size = (1, 2, 1)
         self.register_buffer(&#39;Constant 1&#39;, self.C1)
         self.register_buffer(&#39;Constant 2&#39;, self.C2)
 
     def forward(self, t, x):
         &#34;&#34;&#34;
         Returns the right-hand-side of the differential equation dx/dt = f(t, x)
-        x is a length 2 vector of the form x = [y, z], where y = dz/dt 
+        x is a PyTorch tensor with size [batch_size, 2], where the second dimension corresponds to length 2 vector of the x = [y, z], where y = dz/dt 
 
         Parameters
         ----------
         t : float
             Time
-        x : 1D PyTorch tensor with length 2
-            A length 2 vector of the form x = [y, z], where y = dz/dt
+        x : PyTorch tensor with dimensions [batch_size, 2]
+            The second dimension correspond to x = [y, z], where y = dz/dt
 
         Returns
         -------
-        dxdt : 1D PyTorch tensor with length 2
-            A length 2 vector corresponding to dxdt = [dy/dt, dz/dt]
+        dxdt : PyTorch tensor with dimensions [batch_size, 2]
+            The second dimension corresponds to dxdt = [dy/dt, dz/dt]
         &#34;&#34;&#34;
         self.nfe += 1
-        F = self.Fc(x[1].unsqueeze(-1))
-        ode = torch.matmul(self.C1, x) + (self.d + (self.A0/self.Q)*torch.cos(self.Om*t) + F/self.k) * self.C2
+        F = self.Fc(x[:, 1:])
+    
+        # The first term is broadcasted matrix multiplication of (1, 2, 2) * (b, 2, 1) = (b, 2, 1), where b = self.batch_size.
+        # The second term is broadcasted matrix multiplication of (1, 2, 1) * (b, 1, 1) = (b, 2, 1)
+        ode = torch.matmul(self.C1, x.unsqueeze(-1)) + torch.matmul(self.C2, (self.d + (self.A0/self.Q)*torch.cos(self.Om*t) + F/self.k).unsqueeze(-1))
 
-        return ode
+        # Squeeze to return a tensor of shape (b, 2)
+        return ode.squeeze(-1)
 
 
 class LightningTrainer(pl.LightningModule):
@@ -247,55 +259,63 @@ class LightningTrainer(pl.LightningModule):
     ----------
     ODE : An instance of class AFM_NeuralODE
         A NeuralODE model to represent the dynamics between the tip and the sample.
-    train_dataset : An instance of the class GeneralModeDataset
-        A PyTorch dataset of a given general mode approach data to train the NeuralODE in. 
-    A0 : float
-        Free amplitude of the tip at resonance in units of [nm].
-        Follows the definition outlined in M. Lee et. al., Phys. Rev. Lett. 97, 036104 (2006).
-    Om : float
-        Ratio between the resonance frequency f0 and the driving frequency f. Om = f/f0
-    Q : float
-        Q-factor of the cantilever/QTF.
-    k : float
-        Spring constant of the cantilever/QTF in units of [N/m].
-    lr : float
-        Learning rate of the model. Default value is 0.01.
+    hparams : An argparse.Namespace object with fields &#39;train_dataset&#39;, &#39;hidden_nodes&#39;, &#39;batch_size&#39;, &#39;lr&#39;, and &#39;solver&#39;.
+            Hyperparameters of the model. 
+            &#39;train_dataset&#39; : An instance of the class GeneralModeDataset
+                A PyTorch dataset of a given general mode approach data to train the NeuralODE with. 
+            &#39;hidden nodes&#39; : list or array of integers
+                List of number of nodes in the hidden layers of the model.
+            &#39;batch_size&#39; : integer
+                Batch_size of the model
+            &#39;lr&#39; : float
+                Learning rate
+            &#39;solver&#39; : string, must be compatible with TorchDiffEq.odeint_adjoint
+                Type of ODE solver to be used to solve the NeuralODE
     &#34;&#34;&#34;
 
-    def __init__(self, train_dataset, lr = 0.01, hidden_nodes = [4], batch_size = 1, solver = &#39;dopri5&#39;):
+    #def __init__(self, train_dataset, lr = 0.05, hidden_nodes = [10, 10], batch_size = 1, solver = &#39;dopri5&#39;):
+    def __init__(self, hparams):
         &#34;&#34;&#34;
         Parameters
         ----------
-        train_dataset : An instance of PyTorch Dataset
-            PyTorch dataset corresponding to the training data
-        hidden_nodes : list of int
-            List of the nodes in each of the hidden layers of the model.
-        lr : float
-            Learning rate of the model. Default value is 0.01.
+        hparams : An argparse.Namespace object with fields &#39;train_dataset&#39;, &#39;hidden_nodes&#39;, &#39;batch_size&#39;, &#39;lr&#39;, and &#39;solver&#39;.
+            Hyperparameters of the model. 
+            &#39;train_dataset&#39; : An instance of the class GeneralModeDataset
+                A PyTorch dataset of a given general mode approach data to train the NeuralODE with. 
+            &#39;hidden nodes&#39; : list or array of integers
+                List of number of nodes in the hidden layers of the model.
+            &#39;batch_size&#39; : integer
+                Batch_size of the model
+            &#39;lr&#39; : float
+                Learning rate
+            &#39;solver&#39; : string, must be compatible with TorchDiffEq.odeint_adjoint
+                Type of ODE solver to be used to solve the NeuralODE
         &#34;&#34;&#34;
         super(LightningTrainer, self).__init__()
-        self.train_dataset = train_dataset
+        self.hparams = hparams
+        self.train_dataset = self.hparams.train_dataset
         ode_params = self.train_dataset.ode_params
-        self.ODE = AFM_NeuralODE(**ode_params, d = 0, hidden_nodes = hidden_nodes)
-        self.batch_size = batch_size
-        self.lr = lr
-        self.solver = solver
+        self.ODE = AFM_NeuralODE(**ode_params, hidden_nodes = self.hparams.hidden_nodes)
+        self.batch_size = self.hparams.batch_size
+        self.lr = self.hparams.lr
+        self.solver = self.hparams.solver
 
     def forward(self, t, x0, d):
-        self.ODE.d = d
+        self.ODE.d = d.view(self.batch_size, 1)
 
         x_pred = odeint(self.ODE, x0, t, method = self.solver)
-        z_pred = x_pred[:,1]
+        # x_pred has shape = [time, batch_size, 2]. Permute z_pred so that it has shape = [batch_size, time]
+        z_pred = x_pred[:,:,1].permute(1,0)
 
         return z_pred
 
     def training_step(self, batch, batch_nb):
         t = batch[&#39;time&#39;][0].float()
-        x0 = batch[&#39;x0&#39;][0].float()
-        d = batch[&#39;d&#39;][0]
+        x0 = batch[&#39;x0&#39;].float()
+        d = batch[&#39;d&#39;].float()
 
         z_pred = self.forward(t, x0, d)
-        z_true = batch[&#39;z&#39;][0].float()
+        z_true = batch[&#39;z&#39;].float()
 
         log1pI_pred = self.LogSpectra(z_pred)
         log1pI_true = self.LogSpectra(z_true)
@@ -327,15 +347,59 @@ class LightningTrainer(pl.LightningModule):
         &#34;&#34;&#34;
 
         z_fft = torch.rfft(z, 1)
-        z_I = torch.sum(z_fft**2, dim = -1)
-        z_log1pI = torch.log1p(z_I)
+        #z_I = torch.sum(z_fft**2, dim = -1)
+        z_log1pI = torch.norm(z_fft, p = 2, dim = -1)
+        #z_log1pI = torch.log1p(z_I)
 
         return z_log1pI
 
     def configure_optimizers(self):
         optim = torch.optim.Adam(self.parameters(), lr = self.lr)
-        sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, &#39;min&#39;, 0.5, 100, threshold = 0.05, threshold_mode = &#39;rel&#39;)
-        return [optim], [sched]</code></pre>
+        #sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, &#39;min&#39;, 0.5, 100, threshold = 0.05, threshold_mode = &#39;rel&#39;)
+        #return [optim], [sched]
+        return optim
+
+    def predict_z(self):
+        pass
+
+    def predict_force(self, d):
+        d = np.array(d)
+        d_tensor = torch.from_numpy(d).cuda(non_blocking = True).float().reshape(-1, 1)
+        F_pred = self.ODE.Fc(d_tensor).cpu().detach().numpy()
+        return F_pred
+
+def TrainModel(model, max_epochs = 10000, checkpoint_path = &#39;./checkpoints&#39;):
+    &#34;&#34;&#34;
+    Trains the model using PyTorch_Lightning.trainer. 
+
+    Parameters
+    ----------
+    model : An instance of PyTorch_Lightning.LightningModule
+        Neural network to be trained. 
+    max_epochs : integer
+        Maximum number of training.
+    checkpoint_path : path
+        Path to save the checkpointed model during training.
+    &#34;&#34;&#34;
+    checkpoint_callback = pl.ModelCheckpoint(filepath = checkpoint_path, save_best_only = True, verbose = True, monitor = &#39;loss&#39;, mode = &#39;min&#39;, prefix = &#39;&#39;)
+    trainer = pl.Trainer(gpus = 1, early_stop_callback = None, checkpoint_callback = checkpoint_callback, show_progress_bar = True, max_nb_epochs = max_epochs)
+    trainer.fit(model)
+
+def LoadModel(checkpoint_path):
+    &#34;&#34;&#34;
+    Loads the checkpointed model from checkpoint_path. 
+
+    Parameters
+    ----------
+    checkpoint_path : path
+        Path to load the checkpointed model from.
+
+    Returns
+    -------
+    loaded_model : An instance of PyTorch_Lightning.LightningModule
+        Loaded neural network.
+    &#34;&#34;&#34;
+    return LightningTrainer.load_from_checkpoint(checkpoint_path)</code></pre>
 </details>
 </section>
 <section>
@@ -343,19 +407,95 @@ class LightningTrainer(pl.LightningModule):
 <section>
 </section>
 <section>
+<h2 class="section-title" id="header-functions">Functions</h2>
+<dl>
+<dt id="cp_detection.NeuralODE.LoadModel"><code class="name flex">
+<span>def <span class="ident">LoadModel</span></span>(<span>checkpoint_path)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Loads the checkpointed model from checkpoint_path. </p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>checkpoint_path</code></strong> :&ensp;<code>path</code></dt>
+<dd>Path to load the checkpointed model from.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>loaded_model</code></strong> :&ensp;<code>An</code> <code>instance</code> of <code>PyTorch_Lightning.LightningModule</code></dt>
+<dd>Loaded neural network.</dd>
+</dl></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def LoadModel(checkpoint_path):
+    &#34;&#34;&#34;
+    Loads the checkpointed model from checkpoint_path. 
+
+    Parameters
+    ----------
+    checkpoint_path : path
+        Path to load the checkpointed model from.
+
+    Returns
+    -------
+    loaded_model : An instance of PyTorch_Lightning.LightningModule
+        Loaded neural network.
+    &#34;&#34;&#34;
+    return LightningTrainer.load_from_checkpoint(checkpoint_path)</code></pre>
+</details>
+</dd>
+<dt id="cp_detection.NeuralODE.TrainModel"><code class="name flex">
+<span>def <span class="ident">TrainModel</span></span>(<span>model, max_epochs=10000, checkpoint_path='./checkpoints')</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Trains the model using PyTorch_Lightning.trainer. </p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>model</code></strong> :&ensp;<code>An</code> <code>instance</code> of <code>PyTorch_Lightning.LightningModule</code></dt>
+<dd>Neural network to be trained.</dd>
+<dt><strong><code>max_epochs</code></strong> :&ensp;<code>integer</code></dt>
+<dd>Maximum number of training.</dd>
+<dt><strong><code>checkpoint_path</code></strong> :&ensp;<code>path</code></dt>
+<dd>Path to save the checkpointed model during training.</dd>
+</dl></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def TrainModel(model, max_epochs = 10000, checkpoint_path = &#39;./checkpoints&#39;):
+    &#34;&#34;&#34;
+    Trains the model using PyTorch_Lightning.trainer. 
+
+    Parameters
+    ----------
+    model : An instance of PyTorch_Lightning.LightningModule
+        Neural network to be trained. 
+    max_epochs : integer
+        Maximum number of training.
+    checkpoint_path : path
+        Path to save the checkpointed model during training.
+    &#34;&#34;&#34;
+    checkpoint_callback = pl.ModelCheckpoint(filepath = checkpoint_path, save_best_only = True, verbose = True, monitor = &#39;loss&#39;, mode = &#39;min&#39;, prefix = &#39;&#39;)
+    trainer = pl.Trainer(gpus = 1, early_stop_callback = None, checkpoint_callback = checkpoint_callback, show_progress_bar = True, max_nb_epochs = max_epochs)
+    trainer.fit(model)</code></pre>
+</details>
+</dd>
+</dl>
 </section>
 <section>
 <h2 class="section-title" id="header-classes">Classes</h2>
 <dl>
 <dt id="cp_detection.NeuralODE.AFM_NeuralODE"><code class="flex name class">
 <span>class <span class="ident">AFM_NeuralODE</span></span>
-<span>(</span><span>A0, Om, Q, k, d=0.0, hidden_nodes=[4])</span>
+<span>(</span><span>A0, Om, Q, k, hidden_nodes=[4])</span>
 </code></dt>
 <dd>
 <section class="desc"><p>A
 Pytorch module to create a NeuralODE modeling the AFM tip-sample dynamics.
 Note that all length scales involved in the model are scaled by setting 1[nm] = 1
 and all timescales scaled to w0*1[s] = 1.</p>
+<p>&hellip;</p>
 <h2 id="attributes">Attributes</h2>
 <dl>
 <dt><strong><code>Fc</code></strong> :&ensp;<code>An</code> <code>instance</code> of <code>class</code> <a title="cp_detection.NeuralODE.F_cons" href="#cp_detection.NeuralODE.F_cons"><code>F_cons</code></a></dt>
@@ -391,8 +531,8 @@ Follows the definition outlined in M. Lee et. al., Phys. Rev. Lett. 97, 036104 (
 <dd>Q-factor of the cantilever/QTF.</dd>
 <dt><strong><code>k</code></strong> :&ensp;<code>float</code></dt>
 <dd>Spring constant of the cantilever/QTF in units of [N/m].</dd>
-<dt><strong><code>d</code></strong> :&ensp;<code>float</code></dt>
-<dd>Mean tip-sample distance in units of [nm]. Default value is 0.</dd>
+<dt><strong><code>d</code></strong> :&ensp;<code>PyTorch</code> <code>tensor</code> <code>with</code> <code>dimensions</code> [<code>batch_size</code>, <code>1</code>]</dt>
+<dd>Batched mean tip-sample distance in units of [nm]. Initialized to None.</dd>
 </dl></section>
 <details class="source">
 <summary>
@@ -403,6 +543,8 @@ Follows the definition outlined in M. Lee et. al., Phys. Rev. Lett. 97, 036104 (
     A  Pytorch module to create a NeuralODE modeling the AFM tip-sample dynamics.
     Note that all length scales involved in the model are scaled by setting 1[nm] = 1 
     and all timescales scaled to w0*1[s] = 1.
+
+    ...
 
     Attributes
     ----------
@@ -429,7 +571,7 @@ Follows the definition outlined in M. Lee et. al., Phys. Rev. Lett. 97, 036104 (
         x is a length 2 vector of the form x = [y, z], where y = dz/dt 
     &#34;&#34;&#34;
 
-    def __init__(self, A0, Om, Q, k, d = 0., hidden_nodes = [4]):
+    def __init__(self, A0, Om, Q, k, hidden_nodes = [4]):
         &#34;&#34;&#34;
         Parameters
         ----------
@@ -444,47 +586,51 @@ Follows the definition outlined in M. Lee et. al., Phys. Rev. Lett. 97, 036104 (
             Q-factor of the cantilever/QTF.
         k : float
             Spring constant of the cantilever/QTF in units of [N/m].
-        d : float
-            Mean tip-sample distance in units of [nm]. Default value is 0.
+        d : PyTorch tensor with dimensions [batch_size, 1]
+            Batched mean tip-sample distance in units of [nm]. Initialized to None.
         &#34;&#34;&#34;
         super(AFM_NeuralODE, self).__init__()
         self.Fc = F_cons(hidden_nodes)
         self.nfe = 0
 
-        self.d = d
+        self.d = None
         self.A0 = A0
         self.Om = Om
         self.Q = Q
         self.k = k
 
         # Constant tensors to be used in the model
-        self.C1 = torch.tensor([[-1./self.Q, -1.], [1., 0.]], device = torch.device(&#34;cuda&#34;))
-        self.C2 = torch.tensor([1.,0.], device = torch.device(&#34;cuda&#34;))
+        self.C1 = torch.tensor([[-1./self.Q, -1.], [1., 0.]], device = torch.device(&#34;cuda&#34;)).unsqueeze(0) # Has size = (1, 2, 2)
+        self.C2 = torch.tensor([[1.],[0.]], device = torch.device(&#34;cuda&#34;)).unsqueeze(0) # Has size = (1, 2, 1)
         self.register_buffer(&#39;Constant 1&#39;, self.C1)
         self.register_buffer(&#39;Constant 2&#39;, self.C2)
 
     def forward(self, t, x):
         &#34;&#34;&#34;
         Returns the right-hand-side of the differential equation dx/dt = f(t, x)
-        x is a length 2 vector of the form x = [y, z], where y = dz/dt 
+        x is a PyTorch tensor with size [batch_size, 2], where the second dimension corresponds to length 2 vector of the x = [y, z], where y = dz/dt 
 
         Parameters
         ----------
         t : float
             Time
-        x : 1D PyTorch tensor with length 2
-            A length 2 vector of the form x = [y, z], where y = dz/dt
+        x : PyTorch tensor with dimensions [batch_size, 2]
+            The second dimension correspond to x = [y, z], where y = dz/dt
 
         Returns
         -------
-        dxdt : 1D PyTorch tensor with length 2
-            A length 2 vector corresponding to dxdt = [dy/dt, dz/dt]
+        dxdt : PyTorch tensor with dimensions [batch_size, 2]
+            The second dimension corresponds to dxdt = [dy/dt, dz/dt]
         &#34;&#34;&#34;
         self.nfe += 1
-        F = self.Fc(x[1].unsqueeze(-1))
-        ode = torch.matmul(self.C1, x) + (self.d + (self.A0/self.Q)*torch.cos(self.Om*t) + F/self.k) * self.C2
+        F = self.Fc(x[:, 1:])
+    
+        # The first term is broadcasted matrix multiplication of (1, 2, 2) * (b, 2, 1) = (b, 2, 1), where b = self.batch_size.
+        # The second term is broadcasted matrix multiplication of (1, 2, 1) * (b, 1, 1) = (b, 2, 1)
+        ode = torch.matmul(self.C1, x.unsqueeze(-1)) + torch.matmul(self.C2, (self.d + (self.A0/self.Q)*torch.cos(self.Om*t) + F/self.k).unsqueeze(-1))
 
-        return ode</code></pre>
+        # Squeeze to return a tensor of shape (b, 2)
+        return ode.squeeze(-1)</code></pre>
 </details>
 <h3>Ancestors</h3>
 <ul class="hlist">
@@ -497,18 +643,18 @@ Follows the definition outlined in M. Lee et. al., Phys. Rev. Lett. 97, 036104 (
 </code></dt>
 <dd>
 <section class="desc"><p>Returns the right-hand-side of the differential equation dx/dt = f(t, x)
-x is a length 2 vector of the form x = [y, z], where y = dz/dt </p>
+x is a PyTorch tensor with size [batch_size, 2], where the second dimension corresponds to length 2 vector of the x = [y, z], where y = dz/dt </p>
 <h2 id="parameters">Parameters</h2>
 <dl>
 <dt><strong><code>t</code></strong> :&ensp;<code>float</code></dt>
 <dd>Time</dd>
-<dt><strong><code>x</code></strong> :&ensp;<code>1D</code> <code>PyTorch</code> <code>tensor</code> <code>with</code> <code>length</code> <code>2</code></dt>
-<dd>A length 2 vector of the form x = [y, z], where y = dz/dt</dd>
+<dt><strong><code>x</code></strong> :&ensp;<code>PyTorch</code> <code>tensor</code> <code>with</code> <code>dimensions</code> [<code>batch_size</code>, <code>2</code>]</dt>
+<dd>The second dimension correspond to x = [y, z], where y = dz/dt</dd>
 </dl>
 <h2 id="returns">Returns</h2>
 <dl>
-<dt><strong><code>dxdt</code></strong> :&ensp;<code>1D</code> <code>PyTorch</code> <code>tensor</code> <code>with</code> <code>length</code> <code>2</code></dt>
-<dd>A length 2 vector corresponding to dxdt = [dy/dt, dz/dt]</dd>
+<dt><strong><code>dxdt</code></strong> :&ensp;<code>PyTorch</code> <code>tensor</code> <code>with</code> <code>dimensions</code> [<code>batch_size</code>, <code>2</code>]</dt>
+<dd>The second dimension corresponds to dxdt = [dy/dt, dz/dt]</dd>
 </dl></section>
 <details class="source">
 <summary>
@@ -517,25 +663,29 @@ x is a length 2 vector of the form x = [y, z], where y = dz/dt </p>
 <pre><code class="python">def forward(self, t, x):
     &#34;&#34;&#34;
     Returns the right-hand-side of the differential equation dx/dt = f(t, x)
-    x is a length 2 vector of the form x = [y, z], where y = dz/dt 
+    x is a PyTorch tensor with size [batch_size, 2], where the second dimension corresponds to length 2 vector of the x = [y, z], where y = dz/dt 
 
     Parameters
     ----------
     t : float
         Time
-    x : 1D PyTorch tensor with length 2
-        A length 2 vector of the form x = [y, z], where y = dz/dt
+    x : PyTorch tensor with dimensions [batch_size, 2]
+        The second dimension correspond to x = [y, z], where y = dz/dt
 
     Returns
     -------
-    dxdt : 1D PyTorch tensor with length 2
-        A length 2 vector corresponding to dxdt = [dy/dt, dz/dt]
+    dxdt : PyTorch tensor with dimensions [batch_size, 2]
+        The second dimension corresponds to dxdt = [dy/dt, dz/dt]
     &#34;&#34;&#34;
     self.nfe += 1
-    F = self.Fc(x[1].unsqueeze(-1))
-    ode = torch.matmul(self.C1, x) + (self.d + (self.A0/self.Q)*torch.cos(self.Om*t) + F/self.k) * self.C2
+    F = self.Fc(x[:, 1:])
 
-    return ode</code></pre>
+    # The first term is broadcasted matrix multiplication of (1, 2, 2) * (b, 2, 1) = (b, 2, 1), where b = self.batch_size.
+    # The second term is broadcasted matrix multiplication of (1, 2, 1) * (b, 1, 1) = (b, 2, 1)
+    ode = torch.matmul(self.C1, x.unsqueeze(-1)) + torch.matmul(self.C2, (self.d + (self.A0/self.Q)*torch.cos(self.Om*t) + F/self.k).unsqueeze(-1))
+
+    # Squeeze to return a tensor of shape (b, 2)
+    return ode.squeeze(-1)</code></pre>
 </details>
 </dd>
 </dl>
@@ -617,29 +767,35 @@ z is assumed to be a tensor with size [1].</p>
         self.elu = nn.ELU()
         self.tanh = nn.Tanh()
 
+        # Initialize weights and biases
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.normal_(m.weight, mean=0, std=1.0e-4)
+                nn.init.constant_(m.bias, val=0)
+
     def forward(self, z):
         &#34;&#34;&#34;
         Returns the neural network output as a function of input z.
-        z is assumed to be a tensor with size [1].
+        z is assumed to be a tensor with size [batch_size, 1].
 
         Parameters
         ----------
-        z : tensor with size [1].
+        z : tensor with dimensions [batch_size, 1].
             Neural network input. Represents the instantaneous tip-sample distance.
 
         Returns
         -------
-        F : tensor with size [1].
+        F : tensor with dimensions [batch_size, 1].
             Neural network output. Represents the modeled tip-sample force.
         &#34;&#34;&#34;
         interm = self.layers[0](z)
         
         for layer in self.layers[1:]:
-            interm = self.elu(interm)
+            interm = self.tanh(interm)
             interm = layer(interm)
 
-        F = self.tanh(interm)
-        return F</code></pre>
+        #F = self.tanh(interm)
+        return interm</code></pre>
 </details>
 <h3>Ancestors</h3>
 <ul class="hlist">
@@ -652,12 +808,12 @@ z is assumed to be a tensor with size [1].</p>
 </code></dt>
 <dd>
 <section class="desc"><p>Returns the neural network output as a function of input z.
-z is assumed to be a tensor with size [1].</p>
+z is assumed to be a tensor with size [batch_size, 1].</p>
 <h2 id="parameters">Parameters</h2>
-<p>z : tensor with size [1].
+<p>z : tensor with dimensions [batch_size, 1].
 Neural network input. Represents the instantaneous tip-sample distance.</p>
 <h2 id="returns">Returns</h2>
-<p>F : tensor with size [1].
+<p>F : tensor with dimensions [batch_size, 1].
 Neural network output. Represents the modeled tip-sample force.</p></section>
 <details class="source">
 <summary>
@@ -666,26 +822,26 @@ Neural network output. Represents the modeled tip-sample force.</p></section>
 <pre><code class="python">def forward(self, z):
     &#34;&#34;&#34;
     Returns the neural network output as a function of input z.
-    z is assumed to be a tensor with size [1].
+    z is assumed to be a tensor with size [batch_size, 1].
 
     Parameters
     ----------
-    z : tensor with size [1].
+    z : tensor with dimensions [batch_size, 1].
         Neural network input. Represents the instantaneous tip-sample distance.
 
     Returns
     -------
-    F : tensor with size [1].
+    F : tensor with dimensions [batch_size, 1].
         Neural network output. Represents the modeled tip-sample force.
     &#34;&#34;&#34;
     interm = self.layers[0](z)
     
     for layer in self.layers[1:]:
-        interm = self.elu(interm)
+        interm = self.tanh(interm)
         interm = layer(interm)
 
-    F = self.tanh(interm)
-    return F</code></pre>
+    #F = self.tanh(interm)
+    return interm</code></pre>
 </details>
 </dd>
 </dl>
@@ -785,7 +941,7 @@ Required form is ode_params = {'A0' : float, 'Q' : float, 'Om' : float, 'k' : fl
 </dd>
 <dt id="cp_detection.NeuralODE.LightningTrainer"><code class="flex name class">
 <span>class <span class="ident">LightningTrainer</span></span>
-<span>(</span><span>train_dataset, lr=0.01, hidden_nodes=[4], batch_size=1, solver='dopri5')</span>
+<span>(</span><span>hparams)</span>
 </code></dt>
 <dd>
 <section class="desc"><p>A PyTorch-Lightning LightningModule for training the NeuralODE created by the class AFM_NeuralODE. </p>
@@ -794,29 +950,32 @@ Required form is ode_params = {'A0' : float, 'Q' : float, 'Om' : float, 'k' : fl
 <dl>
 <dt><strong><code>ODE</code></strong> :&ensp;<code>An</code> <code>instance</code> of <code>class</code> <a title="cp_detection.NeuralODE.AFM_NeuralODE" href="#cp_detection.NeuralODE.AFM_NeuralODE"><code>AFM_NeuralODE</code></a></dt>
 <dd>A NeuralODE model to represent the dynamics between the tip and the sample.</dd>
-<dt><strong><code>train_dataset</code></strong> :&ensp;<code>An</code> <code>instance</code> of <code>the</code> <code>class</code> <a title="cp_detection.NeuralODE.GeneralModeDataset" href="#cp_detection.NeuralODE.GeneralModeDataset"><code>GeneralModeDataset</code></a></dt>
-<dd>A PyTorch dataset of a given general mode approach data to train the NeuralODE in.</dd>
-<dt><strong><code>A0</code></strong> :&ensp;<code>float</code></dt>
-<dd>Free amplitude of the tip at resonance in units of [nm].
-Follows the definition outlined in M. Lee et. al., Phys. Rev. Lett. 97, 036104 (2006).</dd>
-<dt><strong><code>Om</code></strong> :&ensp;<code>float</code></dt>
-<dd>Ratio between the resonance frequency f0 and the driving frequency f. Om = f/f0</dd>
-<dt><strong><code>Q</code></strong> :&ensp;<code>float</code></dt>
-<dd>Q-factor of the cantilever/QTF.</dd>
-<dt><strong><code>k</code></strong> :&ensp;<code>float</code></dt>
-<dd>Spring constant of the cantilever/QTF in units of [N/m].</dd>
-<dt><strong><code>lr</code></strong> :&ensp;<code>float</code></dt>
-<dd>Learning rate of the model. Default value is 0.01.</dd>
 </dl>
+<p>hparams : An argparse.Namespace object with fields 'train_dataset', 'hidden_nodes', 'batch_size', 'lr', and 'solver'.
+Hyperparameters of the model.
+'train_dataset' : An instance of the class GeneralModeDataset
+A PyTorch dataset of a given general mode approach data to train the NeuralODE with.
+'hidden nodes' : list or array of integers
+List of number of nodes in the hidden layers of the model.
+'batch_size' : integer
+Batch_size of the model
+'lr' : float
+Learning rate
+'solver' : string, must be compatible with TorchDiffEq.odeint_adjoint
+Type of ODE solver to be used to solve the NeuralODE</p>
 <h2 id="parameters">Parameters</h2>
-<dl>
-<dt><strong><code>train_dataset</code></strong> :&ensp;<code>An</code> <code>instance</code> of <code>PyTorch</code> <code>Dataset</code></dt>
-<dd>PyTorch dataset corresponding to the training data</dd>
-<dt><strong><code>hidden_nodes</code></strong> :&ensp;<code>list</code> of <code>int</code></dt>
-<dd>List of the nodes in each of the hidden layers of the model.</dd>
-<dt><strong><code>lr</code></strong> :&ensp;<code>float</code></dt>
-<dd>Learning rate of the model. Default value is 0.01.</dd>
-</dl></section>
+<p>hparams : An argparse.Namespace object with fields 'train_dataset', 'hidden_nodes', 'batch_size', 'lr', and 'solver'.
+Hyperparameters of the model.
+'train_dataset' : An instance of the class GeneralModeDataset
+A PyTorch dataset of a given general mode approach data to train the NeuralODE with.
+'hidden nodes' : list or array of integers
+List of number of nodes in the hidden layers of the model.
+'batch_size' : integer
+Batch_size of the model
+'lr' : float
+Learning rate
+'solver' : string, must be compatible with TorchDiffEq.odeint_adjoint
+Type of ODE solver to be used to solve the NeuralODE</p></section>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -831,55 +990,63 @@ Follows the definition outlined in M. Lee et. al., Phys. Rev. Lett. 97, 036104 (
     ----------
     ODE : An instance of class AFM_NeuralODE
         A NeuralODE model to represent the dynamics between the tip and the sample.
-    train_dataset : An instance of the class GeneralModeDataset
-        A PyTorch dataset of a given general mode approach data to train the NeuralODE in. 
-    A0 : float
-        Free amplitude of the tip at resonance in units of [nm].
-        Follows the definition outlined in M. Lee et. al., Phys. Rev. Lett. 97, 036104 (2006).
-    Om : float
-        Ratio between the resonance frequency f0 and the driving frequency f. Om = f/f0
-    Q : float
-        Q-factor of the cantilever/QTF.
-    k : float
-        Spring constant of the cantilever/QTF in units of [N/m].
-    lr : float
-        Learning rate of the model. Default value is 0.01.
+    hparams : An argparse.Namespace object with fields &#39;train_dataset&#39;, &#39;hidden_nodes&#39;, &#39;batch_size&#39;, &#39;lr&#39;, and &#39;solver&#39;.
+            Hyperparameters of the model. 
+            &#39;train_dataset&#39; : An instance of the class GeneralModeDataset
+                A PyTorch dataset of a given general mode approach data to train the NeuralODE with. 
+            &#39;hidden nodes&#39; : list or array of integers
+                List of number of nodes in the hidden layers of the model.
+            &#39;batch_size&#39; : integer
+                Batch_size of the model
+            &#39;lr&#39; : float
+                Learning rate
+            &#39;solver&#39; : string, must be compatible with TorchDiffEq.odeint_adjoint
+                Type of ODE solver to be used to solve the NeuralODE
     &#34;&#34;&#34;
 
-    def __init__(self, train_dataset, lr = 0.01, hidden_nodes = [4], batch_size = 1, solver = &#39;dopri5&#39;):
+    #def __init__(self, train_dataset, lr = 0.05, hidden_nodes = [10, 10], batch_size = 1, solver = &#39;dopri5&#39;):
+    def __init__(self, hparams):
         &#34;&#34;&#34;
         Parameters
         ----------
-        train_dataset : An instance of PyTorch Dataset
-            PyTorch dataset corresponding to the training data
-        hidden_nodes : list of int
-            List of the nodes in each of the hidden layers of the model.
-        lr : float
-            Learning rate of the model. Default value is 0.01.
+        hparams : An argparse.Namespace object with fields &#39;train_dataset&#39;, &#39;hidden_nodes&#39;, &#39;batch_size&#39;, &#39;lr&#39;, and &#39;solver&#39;.
+            Hyperparameters of the model. 
+            &#39;train_dataset&#39; : An instance of the class GeneralModeDataset
+                A PyTorch dataset of a given general mode approach data to train the NeuralODE with. 
+            &#39;hidden nodes&#39; : list or array of integers
+                List of number of nodes in the hidden layers of the model.
+            &#39;batch_size&#39; : integer
+                Batch_size of the model
+            &#39;lr&#39; : float
+                Learning rate
+            &#39;solver&#39; : string, must be compatible with TorchDiffEq.odeint_adjoint
+                Type of ODE solver to be used to solve the NeuralODE
         &#34;&#34;&#34;
         super(LightningTrainer, self).__init__()
-        self.train_dataset = train_dataset
+        self.hparams = hparams
+        self.train_dataset = self.hparams.train_dataset
         ode_params = self.train_dataset.ode_params
-        self.ODE = AFM_NeuralODE(**ode_params, d = 0, hidden_nodes = hidden_nodes)
-        self.batch_size = batch_size
-        self.lr = lr
-        self.solver = solver
+        self.ODE = AFM_NeuralODE(**ode_params, hidden_nodes = self.hparams.hidden_nodes)
+        self.batch_size = self.hparams.batch_size
+        self.lr = self.hparams.lr
+        self.solver = self.hparams.solver
 
     def forward(self, t, x0, d):
-        self.ODE.d = d
+        self.ODE.d = d.view(self.batch_size, 1)
 
         x_pred = odeint(self.ODE, x0, t, method = self.solver)
-        z_pred = x_pred[:,1]
+        # x_pred has shape = [time, batch_size, 2]. Permute z_pred so that it has shape = [batch_size, time]
+        z_pred = x_pred[:,:,1].permute(1,0)
 
         return z_pred
 
     def training_step(self, batch, batch_nb):
         t = batch[&#39;time&#39;][0].float()
-        x0 = batch[&#39;x0&#39;][0].float()
-        d = batch[&#39;d&#39;][0]
+        x0 = batch[&#39;x0&#39;].float()
+        d = batch[&#39;d&#39;].float()
 
         z_pred = self.forward(t, x0, d)
-        z_true = batch[&#39;z&#39;][0].float()
+        z_true = batch[&#39;z&#39;].float()
 
         log1pI_pred = self.LogSpectra(z_pred)
         log1pI_true = self.LogSpectra(z_true)
@@ -911,15 +1078,26 @@ Follows the definition outlined in M. Lee et. al., Phys. Rev. Lett. 97, 036104 (
         &#34;&#34;&#34;
 
         z_fft = torch.rfft(z, 1)
-        z_I = torch.sum(z_fft**2, dim = -1)
-        z_log1pI = torch.log1p(z_I)
+        #z_I = torch.sum(z_fft**2, dim = -1)
+        z_log1pI = torch.norm(z_fft, p = 2, dim = -1)
+        #z_log1pI = torch.log1p(z_I)
 
         return z_log1pI
 
     def configure_optimizers(self):
         optim = torch.optim.Adam(self.parameters(), lr = self.lr)
-        sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, &#39;min&#39;, 0.5, 100, threshold = 0.05, threshold_mode = &#39;rel&#39;)
-        return [optim], [sched]</code></pre>
+        #sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, &#39;min&#39;, 0.5, 100, threshold = 0.05, threshold_mode = &#39;rel&#39;)
+        #return [optim], [sched]
+        return optim
+
+    def predict_z(self):
+        pass
+
+    def predict_force(self, d):
+        d = np.array(d)
+        d_tensor = torch.from_numpy(d).cuda(non_blocking = True).float().reshape(-1, 1)
+        F_pred = self.ODE.Fc(d_tensor).cpu().detach().numpy()
+        return F_pred</code></pre>
 </details>
 <h3>Ancestors</h3>
 <ul class="hlist">
@@ -967,8 +1145,9 @@ def LogSpectra(z):
     &#34;&#34;&#34;
 
     z_fft = torch.rfft(z, 1)
-    z_I = torch.sum(z_fft**2, dim = -1)
-    z_log1pI = torch.log1p(z_I)
+    #z_I = torch.sum(z_fft**2, dim = -1)
+    z_log1pI = torch.norm(z_fft, p = 2, dim = -1)
+    #z_log1pI = torch.log1p(z_I)
 
     return z_log1pI</code></pre>
 </details>
@@ -988,8 +1167,9 @@ def LogSpectra(z):
 </summary>
 <pre><code class="python">def configure_optimizers(self):
     optim = torch.optim.Adam(self.parameters(), lr = self.lr)
-    sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, &#39;min&#39;, 0.5, 100, threshold = 0.05, threshold_mode = &#39;rel&#39;)
-    return [optim], [sched]</code></pre>
+    #sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, &#39;min&#39;, 0.5, 100, threshold = 0.05, threshold_mode = &#39;rel&#39;)
+    #return [optim], [sched]
+    return optim</code></pre>
 </details>
 </dd>
 <dt id="cp_detection.NeuralODE.LightningTrainer.forward"><code class="name flex">
@@ -1005,12 +1185,42 @@ Also need to return the target
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def forward(self, t, x0, d):
-    self.ODE.d = d
+    self.ODE.d = d.view(self.batch_size, 1)
 
     x_pred = odeint(self.ODE, x0, t, method = self.solver)
-    z_pred = x_pred[:,1]
+    # x_pred has shape = [time, batch_size, 2]. Permute z_pred so that it has shape = [batch_size, time]
+    z_pred = x_pred[:,:,1].permute(1,0)
 
     return z_pred</code></pre>
+</details>
+</dd>
+<dt id="cp_detection.NeuralODE.LightningTrainer.predict_force"><code class="name flex">
+<span>def <span class="ident">predict_force</span></span>(<span>self, d)</span>
+</code></dt>
+<dd>
+<section class="desc"></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def predict_force(self, d):
+    d = np.array(d)
+    d_tensor = torch.from_numpy(d).cuda(non_blocking = True).float().reshape(-1, 1)
+    F_pred = self.ODE.Fc(d_tensor).cpu().detach().numpy()
+    return F_pred</code></pre>
+</details>
+</dd>
+<dt id="cp_detection.NeuralODE.LightningTrainer.predict_z"><code class="name flex">
+<span>def <span class="ident">predict_z</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<section class="desc"></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def predict_z(self):
+    pass</code></pre>
 </details>
 </dd>
 <dt id="cp_detection.NeuralODE.LightningTrainer.train_dataloader"><code class="name flex">
@@ -1058,11 +1268,11 @@ if implementing training_step, return whatever you need in that step</p></sectio
 </summary>
 <pre><code class="python">def training_step(self, batch, batch_nb):
     t = batch[&#39;time&#39;][0].float()
-    x0 = batch[&#39;x0&#39;][0].float()
-    d = batch[&#39;d&#39;][0]
+    x0 = batch[&#39;x0&#39;].float()
+    d = batch[&#39;d&#39;].float()
 
     z_pred = self.forward(t, x0, d)
-    z_true = batch[&#39;z&#39;][0].float()
+    z_true = batch[&#39;z&#39;].float()
 
     log1pI_pred = self.LogSpectra(z_pred)
     log1pI_true = self.LogSpectra(z_true)
@@ -1088,6 +1298,12 @@ if implementing training_step, return whatever you need in that step</p></sectio
 <li><h3>Super-module</h3>
 <ul>
 <li><code><a title="cp_detection" href="index.html">cp_detection</a></code></li>
+</ul>
+</li>
+<li><h3><a href="#header-functions">Functions</a></h3>
+<ul class="">
+<li><code><a title="cp_detection.NeuralODE.LoadModel" href="#cp_detection.NeuralODE.LoadModel">LoadModel</a></code></li>
+<li><code><a title="cp_detection.NeuralODE.TrainModel" href="#cp_detection.NeuralODE.TrainModel">TrainModel</a></code></li>
 </ul>
 </li>
 <li><h3><a href="#header-classes">Classes</a></h3>
@@ -1116,6 +1332,8 @@ if implementing training_step, return whatever you need in that step</p></sectio
 <li><code><a title="cp_detection.NeuralODE.LightningTrainer.LogSpectra" href="#cp_detection.NeuralODE.LightningTrainer.LogSpectra">LogSpectra</a></code></li>
 <li><code><a title="cp_detection.NeuralODE.LightningTrainer.configure_optimizers" href="#cp_detection.NeuralODE.LightningTrainer.configure_optimizers">configure_optimizers</a></code></li>
 <li><code><a title="cp_detection.NeuralODE.LightningTrainer.forward" href="#cp_detection.NeuralODE.LightningTrainer.forward">forward</a></code></li>
+<li><code><a title="cp_detection.NeuralODE.LightningTrainer.predict_force" href="#cp_detection.NeuralODE.LightningTrainer.predict_force">predict_force</a></code></li>
+<li><code><a title="cp_detection.NeuralODE.LightningTrainer.predict_z" href="#cp_detection.NeuralODE.LightningTrainer.predict_z">predict_z</a></code></li>
 <li><code><a title="cp_detection.NeuralODE.LightningTrainer.train_dataloader" href="#cp_detection.NeuralODE.LightningTrainer.train_dataloader">train_dataloader</a></code></li>
 <li><code><a title="cp_detection.NeuralODE.LightningTrainer.training_step" href="#cp_detection.NeuralODE.LightningTrainer.training_step">training_step</a></code></li>
 </ul>
