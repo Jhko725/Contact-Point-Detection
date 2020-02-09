@@ -6,6 +6,7 @@ from torch.utils.data import Dataset, DataLoader
 import pytorch_lightning as pl
 from torchdiffeq import odeint_adjoint as odeint
 import matplotlib.pyplot as plt
+import json
 
 class GeneralModeDataset(Dataset):
     """
@@ -24,16 +25,17 @@ class GeneralModeDataset(Dataset):
         """
         # Needs modifying - in the final form, we do not necessarily need x0 in both the model and the dataset
         self.t = np.array(t)
-        self.d_list = d_list
-        self.z_list = z_list
+        self.d_array = np.array(d_list)
+        self.z_array = np.array(z_list)
         self.ode_params = ode_params
-        self.x0 = x0
+        #self.x0 = x0
 
     def __len__(self):
-        return len(self.d_list)
+        return len(self.d_array)
 
     def __getitem__(self, idx):
-        sample = {'time': self.t, 'd': self.d_list[idx], 'x0': self.x0, 'z': self.z_list[idx][:]}
+        #sample = {'time': self.t, 'd': self.d_list[idx], 'x0': self.x0, 'z': self.z_list[idx][:]}
+        sample = {'time': self.t, 'd': self.d_array[idx], 'z': self.z_array[idx][:]}
         return sample
 
     def __eq__(self, other):
@@ -52,6 +54,39 @@ class GeneralModeDataset(Dataset):
         ax.set_ylabel('z (nm)', fontsize = fontsize)
 
         return fig, ax
+
+    def save(self, savepath):
+        """
+        Saves the given dataset in json format.
+
+        Parameters
+        ----------
+        savepath : path
+            Path to save the dataset at.
+        """
+        with open(savepath, 'w') as savefile:
+            json.dump(self.__dict__, savefile)
+        print('Saved data to: {}'.format(savepath))
+    
+    @classmethod
+    def load(cls, loadpath):
+        """
+        Loads the dataset from a json file.
+
+        Parameters
+        ----------
+        loadpath : path
+            Path to the json file to be loaded.
+        
+        Returns
+        -------
+        dataset : An instance of the class GeneralModeDataset 
+            Loaded dataset.
+        """
+        with open(loadpath) as loadfile:
+            data_dict = json.load(loadfile)
+        
+        return cls(**data_dict)
 
 class F_cons(nn.Module):
     """
