@@ -100,7 +100,8 @@ class ForcedHarmonicOscillator():
             Keyword arguments for scipy.integrate.solve_ivp.
         """
         if x0 == None:
-            x0 = np.array([self.Om*self.A0/np.sqrt(self.Q**2*(1-self.Om**2)**2 + self.Om**2), d])
+            x0 = np.array([0., d])
+            #x0 = np.array([self.Om*self.A0/np.sqrt(self.Q**2*(1-self.Om**2)**2 + self.Om**2), d])
         sol = solve_ivp(self.get_ode(d), (t[0], t[-1]), x0, t_eval = t, vectorized = True, **kwargs)
 
         return sol

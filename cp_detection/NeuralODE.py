@@ -13,7 +13,7 @@ class GeneralModeDataset(Dataset):
     A PyTorch Dataset to handle general mode AFM data. 
     """
 
-    def __init__(self, t, d_list, x0, z_list, ode_params):
+    def __init__(self, t, d_array, z_array, ode_params):
         """
         Parameters
         ----------
@@ -25,17 +25,19 @@ class GeneralModeDataset(Dataset):
         """
         # Needs modifying - in the final form, we do not necessarily need x0 in both the model and the dataset
         self.t = np.array(t)
-        self.d_array = np.array(d_list)
-        self.z_array = np.array(z_list)
+        self.d_array = np.array(d_array)
+        self.z_array = np.array(z_array)
         self.ode_params = ode_params
-        #self.x0 = x0
+        # Need to modify x0_array later
+        self.x0_array = np.zeros((self.d_array.size, 2))
+        self.x0_array[:,1] = self.d_array
 
     def __len__(self):
         return len(self.d_array)
 
     def __getitem__(self, idx):
         #sample = {'time': self.t, 'd': self.d_list[idx], 'x0': self.x0, 'z': self.z_list[idx][:]}
-        sample = {'time': self.t, 'd': self.d_array[idx], 'z': self.z_array[idx][:]}
+        sample = {'time': self.t, 'd': self.d_array[idx], 'x0': self.x0_array[idx][:],'z': self.z_array[idx][:]}
         return sample
 
     def __eq__(self, other):
@@ -312,7 +314,7 @@ class LightningTrainer(pl.LightningModule):
     def forward(self, t, x0, d):
         self.ODE.d = d.view(self.batch_size, 1)
 
-        x_pred = odeint(self.ODE, x0, t, method = self.solver)
+        x_pred = odeint(self.ODE, x0, t, method = self.solver, rtol = 1e-6)
         # x_pred has shape = [time, batch_size, 2]. Permute z_pred so that it has shape = [batch_size, time]
         z_pred = x_pred[:,:,1].permute(1,0)
 
@@ -323,9 +325,11 @@ class LightningTrainer(pl.LightningModule):
         x0 = batch['x0'].float()
         d = batch['d'].float()
 
-        z_pred = self.forward(t, x0, d)
         z_true = batch['z'].float()
+        N_data = z_true.size(1) # length of the validation data
 
+        z_pred = self.forward(t, x0, d)[:, -N_data:]
+        
         log1pI_pred = self.LogSpectra(z_pred)
         log1pI_true = self.LogSpectra(z_true)
 
