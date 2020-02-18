@@ -1,8 +1,22 @@
 
+import abc
 import numpy as np
 import matplotlib.pyplot as plt
 
-class ApproachCurve():
+class ApproachCurve(abc.ABC):
+
+    def __init__(self):
+        pass
+
+    def __len__(self):
+        pass
+
+class GeneralModeAppCurve(ApproachCurve):
+
+    def __init__(self):
+        pass
+
+class SimpleAppCurve():
     """
     A class to store the approach curve data in. 
     The amplitude (A) and phase (P) are by default mechanical amplitude and phase in units of [m] and [rad].

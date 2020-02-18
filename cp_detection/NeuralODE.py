@@ -138,7 +138,7 @@ class F_cons(nn.Module):
         # Initialize weights and biases
         for m in self.modules():
             if isinstance(m, nn.Linear):
-                nn.init.normal_(m.weight, mean=0, std=1.0e-4)
+                nn.init.normal_(m.weight, mean=0, std=1.0e-5)
                 nn.init.constant_(m.bias, val=0)
 
     def forward(self, z):
@@ -159,7 +159,7 @@ class F_cons(nn.Module):
         interm = self.layers[0](z)
         
         for layer in self.layers[1:]:
-            interm = self.tanh(interm)
+            interm = self.elu(interm)
             interm = layer(interm)
 
         #F = self.tanh(interm)
@@ -285,7 +285,7 @@ class LightningTrainer(pl.LightningModule):
     """
 
     #def __init__(self, train_dataset, lr = 0.05, hidden_nodes = [10, 10], batch_size = 1, solver = 'dopri5'):
-    def __init__(self, hparams):
+    def __init__(self, hparams, train_dataset, verbose = True):
         """
         Parameters
         ----------
@@ -304,12 +304,13 @@ class LightningTrainer(pl.LightningModule):
         """
         super(LightningTrainer, self).__init__()
         self.hparams = hparams
-        self.train_dataset = self.hparams.train_dataset
+        self.train_dataset = train_dataset
         ode_params = self.train_dataset.ode_params
         self.ODE = AFM_NeuralODE(**ode_params, hidden_nodes = self.hparams.hidden_nodes)
         self.batch_size = self.hparams.batch_size
         self.lr = self.hparams.lr
         self.solver = self.hparams.solver
+        self._verbose = verbose
 
     def forward(self, t, x0, d):
         self.ODE.d = d.view(self.batch_size, 1)
@@ -327,6 +328,11 @@ class LightningTrainer(pl.LightningModule):
 
         z_true = batch['z'].float()
         N_data = z_true.size(1) # length of the validation data
+        
+        if self._verbose:
+            sys.stdout.write('\r')
+            sys.stdout.write('Forward-propagating...')
+            sys.stdout.flush()
 
         z_pred = self.forward(t, x0, d)[:, -N_data:]
         
@@ -335,6 +341,11 @@ class LightningTrainer(pl.LightningModule):
 
         loss_function = nn.MSELoss()
         loss = loss_function(log1pI_pred, log1pI_true)
+
+        if self._verbose:
+            sys.stdout.write('\r')
+            sys.stdout.write('Backward-propagating...')
+            sys.stdout.flush()
 
         tensorboard_logs = {'train_loss': loss}
         return {'loss': loss, 'log': tensorboard_logs}
@@ -381,35 +392,36 @@ class LightningTrainer(pl.LightningModule):
         F_pred = self.ODE.Fc(d_tensor).cpu().detach().numpy()
         return F_pred
 
-def TrainModel(model, max_epochs = 10000, checkpoint_path = './checkpoints'):
-    """
-    Trains the model using PyTorch_Lightning.trainer. 
+    def TrainModel(self, max_epochs = 10000, checkpoint_path = './checkpoints'):
+        """
+        Trains the model using PyTorch_Lightning.trainer. 
 
-    Parameters
-    ----------
-    model : An instance of PyTorch_Lightning.LightningModule
-        Neural network to be trained. 
-    max_epochs : integer
-        Maximum number of training.
-    checkpoint_path : path
-        Path to save the checkpointed model during training.
-    """
-    checkpoint_callback = pl.ModelCheckpoint(filepath = checkpoint_path, save_best_only = True, verbose = True, monitor = 'loss', mode = 'min', prefix = '')
-    trainer = pl.Trainer(gpus = 1, early_stop_callback = None, checkpoint_callback = checkpoint_callback, show_progress_bar = True, max_nb_epochs = max_epochs)
-    trainer.fit(model)
+        Parameters
+        ----------
+        model : An instance of PyTorch_Lightning.LightningModule
+            Neural network to be trained. 
+        max_epochs : integer
+            Maximum number of training.
+        checkpoint_path : path
+            Path to save the checkpointed model during training.
+        """
+        checkpoint_callback = pl.ModelCheckpoint(filepath = checkpoint_path, save_best_only = True, verbose = True, monitor = 'loss', mode = 'min', prefix = '')
+        trainer = pl.Trainer(gpus = 1, early_stop_callback = None, checkpoint_callback = checkpoint_callback, show_progress_bar = True, max_nb_epochs = max_epochs)
+        trainer.fit(self)
 
-def LoadModel(checkpoint_path):
-    """
-    Loads the checkpointed model from checkpoint_path. 
+    @classmethod
+    def LoadModel(cls, checkpoint_path):
+        """
+        Loads the checkpointed model from checkpoint_path. 
 
-    Parameters
-    ----------
-    checkpoint_path : path
-        Path to load the checkpointed model from.
+        Parameters
+        ----------
+        checkpoint_path : path
+            Path to load the checkpointed model from.
 
-    Returns
-    -------
-    loaded_model : An instance of PyTorch_Lightning.LightningModule
-        Loaded neural network.
-    """
-    return LightningTrainer.load_from_checkpoint(checkpoint_path)
+        Returns
+        -------
+        loaded_model : An instance of PyTorch_Lightning.LightningModule
+            Loaded neural network.
+        """
+        return cls.load_from_checkpoint(checkpoint_path)
