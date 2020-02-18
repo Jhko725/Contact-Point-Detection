@@ -405,7 +405,7 @@ class LightningTrainer(pl.LightningModule):
         checkpoint_path : path
             Path to save the checkpointed model during training.
         """
-        checkpoint_callback = pl.ModelCheckpoint(filepath = checkpoint_path, save_best_only = True, verbose = True, monitor = 'loss', mode = 'min', prefix = '')
+        checkpoint_callback = pl.callbacks.ModelCheckpoint(filepath = checkpoint_path, save_top_k = 1, verbose = True, monitor = 'loss', mode = 'min', prefix = '')
         trainer = pl.Trainer(gpus = 1, early_stop_callback = None, checkpoint_callback = checkpoint_callback, show_progress_bar = True, max_nb_epochs = max_epochs)
         trainer.fit(self)
 
