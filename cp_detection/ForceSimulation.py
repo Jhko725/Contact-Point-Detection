@@ -1,6 +1,8 @@
 import numpy as np
 from scipy.integrate import solve_ivp
-import sys
+import sys, abc
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 # Later on, create ABCs to wrap AFM model and force models.
 
@@ -31,7 +33,7 @@ class ForcedHarmonicOscillator():
         T = 2Q, where 2Q/omega_0 is the true relaxation time.
     """
 
-    def __init__(self, Q, k, Om, A0, Fint):
+    def __init__(self, Q, k, Om, A0, force_model):
         """
         Parameters
         ----------
@@ -51,7 +53,7 @@ class ForcedHarmonicOscillator():
         self.k = k
         self.Om = Om
         self.A0 = A0
-        self.Fint = Fint
+        self.Fint = force_model.F
         self.T = 2*Q
 
     def get_ode(self, d):
@@ -80,10 +82,10 @@ class ForcedHarmonicOscillator():
         
         def ode(t, x): 
             F = self.Fint(x)
-            dxdt = np.matmul(C1, x) + np.matmul(C2, (d+(self.A0/self.Q)*np.cos(self.Om*t)+F/self.k))
+            dxdt = np.matmul(C1, x) + np.matmul(C2, (d+(self.A0/self.Q)*(np.cos(self.Om*t/(1-0.001))+np.cos((1+0.001)*self.Om*t))+F/self.k))
             return dxdt
         return ode
-
+    
     def solve(self, d, t, x0 = None, **kwargs):
         """
         Solves the ode and returns the solution.
@@ -95,7 +97,7 @@ class ForcedHarmonicOscillator():
         t : 1D numpy array
             Time to evaluate the ode solutions. Must be sorted in increasing order.
         x0 : Numpy array with shape (2, 1)
-            Initial value for the state vector. If none is given, x0 = [Om*A0/sqrt(Q^2(1-Om^2)^2 + Om^2), d]. 
+            Initial value for the state vector. If none is given, x0 = [0, d]. 
         kwargs : dict
             Keyword arguments for scipy.integrate.solve_ivp.
         """
@@ -106,7 +108,57 @@ class ForcedHarmonicOscillator():
 
         return sol
 
-class DMT_Maugis():
+    # Create function for plotting normalized tip-sample force
+
+class TipSampleInteraction(abc.ABC):
+
+    @abc.abstractmethod
+    def F(self, x):
+        return None
+
+    def PlotForce(self, z_range, zdot_range, n_steps = 1000, figsize = (7, 5), fontsize = 14, **kwargs):
+        """
+        Plots the tip-sample interaction force as a function of either z, dz/dt, or both.
+        """
+        assert len(z_range) == 2 and len(zdot_range) == 2, 'z_range and zdot_range must be of the form (start, stop)'
+        
+        z = np.linspace(*z_range, n_steps)
+        zdot = np.linspace(*zdot_range, n_steps)
+
+        x = np.vstack([zdot, z])
+        f = self.F(x).flatten()
+      
+        if z_range[0] == z_range[1]:
+            fig, ax = plt.subplots(1, 1, figsize = figsize)
+            ax.plot(zdot, f, **kwargs)
+            ax.set_xlabel('Scaled tip velocity $\omega_0\dot{z} (nm/s)$', fontsize = fontsize)
+            ax.set_ylabel('Tip-sample interaction force $F_{int}$(nN)', fontsize = fontsize)
+        elif zdot_range[0] == zdot_range[1]:
+            fig, ax = plt.subplots(1, 1, figsize = figsize)
+            ax.plot(z, f, **kwargs)
+            ax.set_xlabel('Tip displacement z (nm)', fontsize = fontsize)
+            ax.set_ylabel('Tip-sample interaction force $F_{int}$(nN)', fontsize = fontsize)
+        else:
+            fig = plt.figure()
+            ax = fig.add_subplot(111, projection = '3d')
+            ax.scatter(z, zdot, f, **kwargs)
+            ax.set_xlabel('Tip displacement z(nm)', fontsize = fontsize)
+            ax.set_ylabel('Scaled tip velocity $\omega_0\dot{z} (nm/s)$', fontsize = fontsize)
+            ax.set_zlabel('Tip-sample interaction force $F_{int}$(nN)', fontsize = fontsize)
+
+        ax.grid(ls = '--')
+
+        return fig, ax
+
+class Null(TipSampleInteraction):
+
+    def __init__(self):
+        pass
+
+    def F(self, x):
+        return np.zeros((1, x.shape[-1]))
+
+class DMT_Maugis(TipSampleInteraction):
     """
     Models the tip-sample interaction according to Maugis' approximation to the Derjaguin-Muller-Toporov (a.k.a. Hertz-plus-offset model).
     

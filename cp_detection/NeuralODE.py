@@ -4,9 +4,10 @@ import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 import pytorch_lightning as pl
+from pytorch_lightning.callbacks import ModelCheckpoint
 from torchdiffeq import odeint_adjoint as odeint
 import matplotlib.pyplot as plt
-import json
+import json, sys, os
 
 class GeneralModeDataset(Dataset):
     """
@@ -372,10 +373,10 @@ class LightningTrainer(pl.LightningModule):
 
         z_fft = torch.rfft(z, 1)
         #z_I = torch.sum(z_fft**2, dim = -1)
-        z_log1pI = torch.norm(z_fft, p = 2, dim = -1)
+        #z_log1pI = torch.norm(z_fft, p = 2, dim = -1)
         #z_log1pI = torch.log1p(z_I)
 
-        return z_log1pI
+        return z_fft
 
     def configure_optimizers(self):
         optim = torch.optim.Adam(self.parameters(), lr = self.lr)
@@ -405,8 +406,9 @@ class LightningTrainer(pl.LightningModule):
         checkpoint_path : path
             Path to save the checkpointed model during training.
         """
-        checkpoint_callback = pl.callbacks.ModelCheckpoint(filepath = checkpoint_path, save_top_k = 1, verbose = True, monitor = 'loss', mode = 'min', prefix = '')
-        trainer = pl.Trainer(gpus = 1, early_stop_callback = None, checkpoint_callback = checkpoint_callback, show_progress_bar = True, max_nb_epochs = max_epochs)
+        #logger = TensorBoardLogger(save_dir = os.getcwd(), version = self.slurm_job_id, name = 'lightning_logs')
+        checkpoint_callback = ModelCheckpoint(filepath = checkpoint_path, save_best_only = True, verbose = True, monitor = 'loss', mode = 'min', prefix = '')
+        trainer = pl.Trainer(gpus = 1, checkpoint_callback = checkpoint_callback, early_stop_callback = None, show_progress_bar = True, max_nb_epochs = max_epochs, log_save_interval = 1)
         trainer.fit(self)
 
     @classmethod

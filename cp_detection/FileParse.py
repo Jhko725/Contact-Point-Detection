@@ -2,7 +2,7 @@ import glob
 import os
 import json
 import numpy as np
-from .ApproachCurve import ApproachCurve
+from .ApproachCurve import SimpleAppCurve
 
 def FileParser(data_dir, data_type, data_format = 'txt'):
     """
@@ -170,5 +170,5 @@ class Json2App():
         return Am, Pm, A0
 
     def __call__(self, type_ = 'both'):
-        app_curve = ApproachCurve(type_, self.filepath, self.z, self.Am, self.Pm, self.f, self.res_params['f0'], self.res_params['Q'], self.A0)
+        app_curve = SimpleAppCurve(type_, self.filepath, self.z, self.Am, self.Pm, self.f, self.res_params['f0'], self.res_params['Q'], self.A0)
         return app_curve

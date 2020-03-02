@@ -4,7 +4,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class ApproachCurve(abc.ABC):
-
+    """
+    An abstract base class to serve as an unified interface for treating AFM approach curve data. 
+    """
     def __init__(self):
         pass
 
@@ -13,7 +15,7 @@ class ApproachCurve(abc.ABC):
 
 class GeneralModeAppCurve(ApproachCurve):
 
-    def __init__(self):
+    def __init__(self, d, z):
         pass
 
 class SimpleAppCurve():
@@ -117,7 +119,7 @@ class SimpleAppCurve():
         A_app = self.A[:gnd+1]
         P_app = self.P[:gnd+1]
 
-        app_component = ApproachCurve("app", self.filepath, z_app, A_app, P_app, self.f, self.f0, self.Q, self.A0)
+        app_component = SimpleAppCurve("app", self.filepath, z_app, A_app, P_app, self.f, self.f0, self.Q, self.A0)
         return app_component
 
     def ret(self):
@@ -139,7 +141,7 @@ class SimpleAppCurve():
         A_ret = self.A[gnd:]
         P_ret = self.P[gnd:]
 
-        ret_component = ApproachCurve("ret", self.filepath, z_ret, A_ret, P_ret, self.f, self.f0, self.Q, self.A0)
+        ret_component = SimpleAppCurve("ret", self.filepath, z_ret, A_ret, P_ret, self.f, self.f0, self.Q, self.A0)
         return ret_component
 
     def SortData(self, inc = True):
