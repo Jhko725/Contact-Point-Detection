@@ -286,7 +286,7 @@ class LightningTrainer(pl.LightningModule):
     """
 
     #def __init__(self, train_dataset, lr = 0.05, hidden_nodes = [10, 10], batch_size = 1, solver = 'dopri5'):
-    def __init__(self, hparams, train_dataset, verbose = True):
+    def __init__(self, hparams, train_dataset, hidden_nodes, verbose = True):
         """
         Parameters
         ----------
@@ -307,7 +307,7 @@ class LightningTrainer(pl.LightningModule):
         self.hparams = hparams
         self.train_dataset = train_dataset
         ode_params = self.train_dataset.ode_params
-        self.ODE = AFM_NeuralODE(**ode_params, hidden_nodes = self.hparams.hidden_nodes)
+        self.ODE = AFM_NeuralODE(**ode_params, hidden_nodes = hidden_nodes)
         self.batch_size = self.hparams.batch_size
         self.lr = self.hparams.lr
         self.solver = self.hparams.solver
@@ -354,6 +354,9 @@ class LightningTrainer(pl.LightningModule):
     @pl.data_loader
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size = self.batch_size, shuffle = True)
+
+    def validation_step(self, batch, batch_nb):
+        pass
 
     @staticmethod
     def LogSpectra(z):
@@ -407,7 +410,7 @@ class LightningTrainer(pl.LightningModule):
             Path to save the checkpointed model during training.
         """
         #logger = TensorBoardLogger(save_dir = os.getcwd(), version = self.slurm_job_id, name = 'lightning_logs')
-        checkpoint_callback = ModelCheckpoint(filepath = checkpoint_path, save_best_only = True, verbose = True, monitor = 'loss', mode = 'min', prefix = '')
+        checkpoint_callback = ModelCheckpoint(filepath = checkpoint_path, save_top_k = 1, verbose = True, monitor = 'loss', mode = 'min')
         trainer = pl.Trainer(gpus = 1, checkpoint_callback = checkpoint_callback, early_stop_callback = None, show_progress_bar = True, max_nb_epochs = max_epochs, log_save_interval = 1)
         trainer.fit(self)
 
