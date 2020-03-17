@@ -124,7 +124,7 @@ class F_cons(nn.Module):
             List of the nodes in each of the hidden layers of the model
         """
         super(F_cons, self).__init__()
-        self.hidden_nodes = list(hidden_nodes)
+        self.hidden_nodes = np.array(hidden_nodes, dtype = int)
         self.layers = nn.ModuleList()
         for i in range(len(self.hidden_nodes)):
             if i == 0:
@@ -160,7 +160,7 @@ class F_cons(nn.Module):
         interm = self.layers[0](z)
         
         for layer in self.layers[1:]:
-            interm = self.elu(interm)
+            interm = self.tanh(interm)
             interm = layer(interm)
 
         #F = self.tanh(interm)
@@ -286,7 +286,7 @@ class LightningTrainer(pl.LightningModule):
     """
 
     #def __init__(self, train_dataset, lr = 0.05, hidden_nodes = [10, 10], batch_size = 1, solver = 'dopri5'):
-    def __init__(self, hparams, train_dataset, hidden_nodes, verbose = True):
+    def __init__(self, hparams, verbose = True):
         """
         Parameters
         ----------
@@ -305,13 +305,14 @@ class LightningTrainer(pl.LightningModule):
         """
         super(LightningTrainer, self).__init__()
         self.hparams = hparams
-        self.train_dataset = train_dataset
+        self.train_dataset = GeneralModeDataset.load(self.hparams.train_dataset_path)
         ode_params = self.train_dataset.ode_params
-        self.ODE = AFM_NeuralODE(**ode_params, hidden_nodes = hidden_nodes)
+        self.ODE = AFM_NeuralODE(**ode_params, hidden_nodes = self.hparams.hidden_nodes)
         self.batch_size = self.hparams.batch_size
         self.lr = self.hparams.lr
         self.solver = self.hparams.solver
         self._verbose = verbose
+        self._fft_loss = self.hparams.fft_loss
 
     def forward(self, t, x0, d):
         self.ODE.d = d.view(self.batch_size, 1)
@@ -336,12 +337,14 @@ class LightningTrainer(pl.LightningModule):
             sys.stdout.flush()
 
         z_pred = self.forward(t, x0, d)[:, -N_data:]
-        
-        log1pI_pred = self.LogSpectra(z_pred)
-        log1pI_true = self.LogSpectra(z_true)
-
         loss_function = nn.MSELoss()
-        loss = loss_function(log1pI_pred, log1pI_true)
+        if self._fft_loss:
+            log1pI_pred = self.LogSpectra(z_pred)
+            log1pI_true = self.LogSpectra(z_true)
+
+            loss = loss_function(log1pI_pred, log1pI_true)
+        else:
+            loss = loss_function(z_true, z_pred)
 
         if self._verbose:
             sys.stdout.write('\r')
@@ -351,7 +354,6 @@ class LightningTrainer(pl.LightningModule):
         tensorboard_logs = {'train_loss': loss}
         return {'loss': loss, 'log': tensorboard_logs}
 
-    @pl.data_loader
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size = self.batch_size, shuffle = True)
 
