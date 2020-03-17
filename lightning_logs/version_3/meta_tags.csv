@@ -2,3 +2,4 @@ key,value
 lr,0.02
 batch_size,20
 solver,rk4
+fft_loss,False

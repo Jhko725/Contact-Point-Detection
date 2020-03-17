@@ -2,3 +2,6 @@ key,value
 lr,0.02
 batch_size,20
 solver,rk4
+fft_loss,False
+train_dataset_path,./Data/transient_test2.json
+hidden_nodes,"tensor([20., 20., 20.])"
