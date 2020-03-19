@@ -1,7 +1,0 @@
-key,value
-lr,0.01
-batch_size,20
-solver,dopri5
-fft_loss,False
-train_dataset_path,./Data/transient_test2.json
-hidden_nodes,"tensor([40., 40., 40.])"
