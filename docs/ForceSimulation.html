@@ -26,7 +26,9 @@
 </summary>
 <pre><code class="python">import numpy as np
 from scipy.integrate import solve_ivp
-import sys
+import sys, abc
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 # Later on, create ABCs to wrap AFM model and force models.
 
@@ -57,7 +59,7 @@ class ForcedHarmonicOscillator():
         T = 2Q, where 2Q/omega_0 is the true relaxation time.
     &#34;&#34;&#34;
 
-    def __init__(self, Q, k, Om, A0, Fint):
+    def __init__(self, Q, k, Om, A0, force_model):
         &#34;&#34;&#34;
         Parameters
         ----------
@@ -77,7 +79,7 @@ class ForcedHarmonicOscillator():
         self.k = k
         self.Om = Om
         self.A0 = A0
-        self.Fint = Fint
+        self.Fint = force_model.F
         self.T = 2*Q
 
     def get_ode(self, d):
@@ -106,10 +108,10 @@ class ForcedHarmonicOscillator():
         
         def ode(t, x): 
             F = self.Fint(x)
-            dxdt = np.matmul(C1, x) + np.matmul(C2, (d+(self.A0/self.Q)*np.cos(self.Om*t)+F/self.k))
+            dxdt = np.matmul(C1, x) + np.matmul(C2, (d+(self.A0/self.Q)*(np.cos(self.Om*t))+F/self.k))
             return dxdt
         return ode
-
+    
     def solve(self, d, t, x0 = None, **kwargs):
         &#34;&#34;&#34;
         Solves the ode and returns the solution.
@@ -121,80 +123,18 @@ class ForcedHarmonicOscillator():
         t : 1D numpy array
             Time to evaluate the ode solutions. Must be sorted in increasing order.
         x0 : Numpy array with shape (2, 1)
-            Initial value for the state vector. If none is given, x0 = [Om*A0/sqrt(Q^2(1-Om^2)^2 + Om^2), d]. 
+            Initial value for the state vector. If none is given, x0 = [0, d]. 
         kwargs : dict
             Keyword arguments for scipy.integrate.solve_ivp.
         &#34;&#34;&#34;
         if x0 == None:
-            x0 = np.array([self.Om*self.A0/np.sqrt(self.Q**2*(1-self.Om**2)**2 + self.Om**2), d])
+            x0 = np.array([0., d])
+            #x0 = np.array([self.Om*self.A0/np.sqrt(self.Q**2*(1-self.Om**2)**2 + self.Om**2), d])
         sol = solve_ivp(self.get_ode(d), (t[0], t[-1]), x0, t_eval = t, vectorized = True, **kwargs)
 
         return sol
 
-class DMT_Maugis():
-    &#34;&#34;&#34;
-    Models the tip-sample interaction according to Maugis&#39; approximation to the Derjaguin-Muller-Toporov (a.k.a. Hertz-plus-offset model).
-    
-    ...
-
-    Attributes
-    ----------
-    H : float [1e-18 J]
-        Hamaker constant of the tip-sample Van-der-Waals interaction.
-    R : float [nm]
-        Radius of the tip, which is assumed to be spherical.
-    z0 : float [nm]
-        Distance at which contact is established.
-    E : float [GPa]
-        Effective Young&#39;s modulus between the tip and the sample.
-    &#34;&#34;&#34;
-
-    def __init__(self, H, R, z0, Et, Es, vt, vs):
-        &#34;&#34;&#34;
-        Parameters
-        ----------
-        H : float [1e-18 J]
-            Hamaker constant of the tip-sample Van-der-Waals interaction.
-        R : float [nm]
-            Radius of the tip, which is assumed to be spherical.
-        z0 : float [nm]
-            Distance at which contact is established.
-        Et : float [GPa]
-            Young&#39;s modulus of the tip.
-        Es : float [GPa]
-            Young&#39;s modulus of the sample.
-        vt : float [dimensionless]
-            Poisson ratio of the tip.
-        vs : float [dimensionless]
-            Poisson ratio of the sample.
-        &#34;&#34;&#34;
-        self.H = H
-        self.R = R
-        self.z0 = z0
-        self.E = 1/((1-vt**2)/Et + (1-vs**2)/Es)
-        
-    def F(self, x):
-        &#34;&#34;&#34;
-        Computes the force corresponding to the given force model.
-
-        Parameters
-        ----------
-        x : Numpy array with shape (2, k)
-            State vector, where each column corresponds to the form x = [y, z]&#39;, where y = dz/dt. 
-            k is the number of different x vectors in a single batch.
-
-        Returns
-        -------
-        F : Numpy array with shape (1, k)
-            Force corresponding to state vectors in each columns of the input x.
-        &#34;&#34;&#34;
-        F = np.zeros((1, x.shape[-1]))
-        # Column indices of state vectors that fulfill the condition z&lt;z0
-        contact = x[1, :]&lt;self.z0
-        F[0, ~contact] = -self.H*self.R/(6*x[1, ~contact]**2)
-        F[0, contact] = (4/3)*self.E*np.sqrt(self.R)*(self.z0 - x[1, contact])**1.5 - self.H*self.R/(6*self.z0**2)
-
-        return F
+    # Create function for plotting normalized tip-sample force
 
 def SimulateGeneralMode(AFM, d_array, dt, N_data, relaxation = 7, x0 = None, **kwargs):
     &#34;&#34;&#34;
@@ -335,161 +275,9 @@ Each row corrresponds to data for a given average tip-sample distance d.</dd>
 <section>
 <h2 class="section-title" id="header-classes">Classes</h2>
 <dl>
-<dt id="cp_detection.ForceSimulation.DMT_Maugis"><code class="flex name class">
-<span>class <span class="ident">DMT_Maugis</span></span>
-<span>(</span><span>H, R, z0, Et, Es, vt, vs)</span>
-</code></dt>
-<dd>
-<section class="desc"><p>Models the tip-sample interaction according to Maugis' approximation to the Derjaguin-Muller-Toporov (a.k.a. Hertz-plus-offset model).</p>
-<p>&hellip;</p>
-<h2 id="attributes">Attributes</h2>
-<dl>
-<dt><strong><code>H</code></strong> :&ensp;<code>float</code> [<code>1e</code>-<code>18</code> <code>J</code>]</dt>
-<dd>Hamaker constant of the tip-sample Van-der-Waals interaction.</dd>
-<dt><strong><code>R</code></strong> :&ensp;<code>float</code> [<code>nm</code>]</dt>
-<dd>Radius of the tip, which is assumed to be spherical.</dd>
-<dt><strong><code>z0</code></strong> :&ensp;<code>float</code> [<code>nm</code>]</dt>
-<dd>Distance at which contact is established.</dd>
-<dt><strong><code>E</code></strong> :&ensp;<code>float</code> [<code>GPa</code>]</dt>
-<dd>Effective Young's modulus between the tip and the sample.</dd>
-</dl>
-<h2 id="parameters">Parameters</h2>
-<dl>
-<dt><strong><code>H</code></strong> :&ensp;<code>float</code> [<code>1e</code>-<code>18</code> <code>J</code>]</dt>
-<dd>Hamaker constant of the tip-sample Van-der-Waals interaction.</dd>
-<dt><strong><code>R</code></strong> :&ensp;<code>float</code> [<code>nm</code>]</dt>
-<dd>Radius of the tip, which is assumed to be spherical.</dd>
-<dt><strong><code>z0</code></strong> :&ensp;<code>float</code> [<code>nm</code>]</dt>
-<dd>Distance at which contact is established.</dd>
-<dt><strong><code>Et</code></strong> :&ensp;<code>float</code> [<code>GPa</code>]</dt>
-<dd>Young's modulus of the tip.</dd>
-<dt><strong><code>Es</code></strong> :&ensp;<code>float</code> [<code>GPa</code>]</dt>
-<dd>Young's modulus of the sample.</dd>
-<dt><strong><code>vt</code></strong> :&ensp;<code>float</code> [<code>dimensionless</code>]</dt>
-<dd>Poisson ratio of the tip.</dd>
-<dt><strong><code>vs</code></strong> :&ensp;<code>float</code> [<code>dimensionless</code>]</dt>
-<dd>Poisson ratio of the sample.</dd>
-</dl></section>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">class DMT_Maugis():
-    &#34;&#34;&#34;
-    Models the tip-sample interaction according to Maugis&#39; approximation to the Derjaguin-Muller-Toporov (a.k.a. Hertz-plus-offset model).
-    
-    ...
-
-    Attributes
-    ----------
-    H : float [1e-18 J]
-        Hamaker constant of the tip-sample Van-der-Waals interaction.
-    R : float [nm]
-        Radius of the tip, which is assumed to be spherical.
-    z0 : float [nm]
-        Distance at which contact is established.
-    E : float [GPa]
-        Effective Young&#39;s modulus between the tip and the sample.
-    &#34;&#34;&#34;
-
-    def __init__(self, H, R, z0, Et, Es, vt, vs):
-        &#34;&#34;&#34;
-        Parameters
-        ----------
-        H : float [1e-18 J]
-            Hamaker constant of the tip-sample Van-der-Waals interaction.
-        R : float [nm]
-            Radius of the tip, which is assumed to be spherical.
-        z0 : float [nm]
-            Distance at which contact is established.
-        Et : float [GPa]
-            Young&#39;s modulus of the tip.
-        Es : float [GPa]
-            Young&#39;s modulus of the sample.
-        vt : float [dimensionless]
-            Poisson ratio of the tip.
-        vs : float [dimensionless]
-            Poisson ratio of the sample.
-        &#34;&#34;&#34;
-        self.H = H
-        self.R = R
-        self.z0 = z0
-        self.E = 1/((1-vt**2)/Et + (1-vs**2)/Es)
-        
-    def F(self, x):
-        &#34;&#34;&#34;
-        Computes the force corresponding to the given force model.
-
-        Parameters
-        ----------
-        x : Numpy array with shape (2, k)
-            State vector, where each column corresponds to the form x = [y, z]&#39;, where y = dz/dt. 
-            k is the number of different x vectors in a single batch.
-
-        Returns
-        -------
-        F : Numpy array with shape (1, k)
-            Force corresponding to state vectors in each columns of the input x.
-        &#34;&#34;&#34;
-        F = np.zeros((1, x.shape[-1]))
-        # Column indices of state vectors that fulfill the condition z&lt;z0
-        contact = x[1, :]&lt;self.z0
-        F[0, ~contact] = -self.H*self.R/(6*x[1, ~contact]**2)
-        F[0, contact] = (4/3)*self.E*np.sqrt(self.R)*(self.z0 - x[1, contact])**1.5 - self.H*self.R/(6*self.z0**2)
-
-        return F</code></pre>
-</details>
-<h3>Methods</h3>
-<dl>
-<dt id="cp_detection.ForceSimulation.DMT_Maugis.F"><code class="name flex">
-<span>def <span class="ident">F</span></span>(<span>self, x)</span>
-</code></dt>
-<dd>
-<section class="desc"><p>Computes the force corresponding to the given force model.</p>
-<h2 id="parameters">Parameters</h2>
-<dl>
-<dt><strong><code>x</code></strong> :&ensp;<code>Numpy</code> <code>array</code> <code>with</code> <code>shape</code> (<code>2</code>, <code>k</code>)</dt>
-<dd>State vector, where each column corresponds to the form x = [y, z]', where y = dz/dt.
-k is the number of different x vectors in a single batch.</dd>
-</dl>
-<h2 id="returns">Returns</h2>
-<dl>
-<dt><strong><code>F</code></strong> :&ensp;<code>Numpy</code> <code>array</code> <code>with</code> <code>shape</code> (<code>1</code>, <code>k</code>)</dt>
-<dd>Force corresponding to state vectors in each columns of the input x.</dd>
-</dl></section>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def F(self, x):
-    &#34;&#34;&#34;
-    Computes the force corresponding to the given force model.
-
-    Parameters
-    ----------
-    x : Numpy array with shape (2, k)
-        State vector, where each column corresponds to the form x = [y, z]&#39;, where y = dz/dt. 
-        k is the number of different x vectors in a single batch.
-
-    Returns
-    -------
-    F : Numpy array with shape (1, k)
-        Force corresponding to state vectors in each columns of the input x.
-    &#34;&#34;&#34;
-    F = np.zeros((1, x.shape[-1]))
-    # Column indices of state vectors that fulfill the condition z&lt;z0
-    contact = x[1, :]&lt;self.z0
-    F[0, ~contact] = -self.H*self.R/(6*x[1, ~contact]**2)
-    F[0, contact] = (4/3)*self.E*np.sqrt(self.R)*(self.z0 - x[1, contact])**1.5 - self.H*self.R/(6*self.z0**2)
-
-    return F</code></pre>
-</details>
-</dd>
-</dl>
-</dd>
 <dt id="cp_detection.ForceSimulation.ForcedHarmonicOscillator"><code class="flex name class">
 <span>class <span class="ident">ForcedHarmonicOscillator</span></span>
-<span>(</span><span>Q, k, Om, A0, Fint)</span>
+<span>(</span><span>Q, k, Om, A0, force_model)</span>
 </code></dt>
 <dd>
 <section class="desc"><p>A class to model the AFM QTF/cantilever - sample system as a forced harmonic oscillator subject to a sinusodial driving force and a given tip-sample force F_int.
@@ -559,7 +347,7 @@ The returned force has dimension of [1e-9N].</dd>
         T = 2Q, where 2Q/omega_0 is the true relaxation time.
     &#34;&#34;&#34;
 
-    def __init__(self, Q, k, Om, A0, Fint):
+    def __init__(self, Q, k, Om, A0, force_model):
         &#34;&#34;&#34;
         Parameters
         ----------
@@ -579,7 +367,7 @@ The returned force has dimension of [1e-9N].</dd>
         self.k = k
         self.Om = Om
         self.A0 = A0
-        self.Fint = Fint
+        self.Fint = force_model.F
         self.T = 2*Q
 
     def get_ode(self, d):
@@ -608,10 +396,10 @@ The returned force has dimension of [1e-9N].</dd>
         
         def ode(t, x): 
             F = self.Fint(x)
-            dxdt = np.matmul(C1, x) + np.matmul(C2, (d+(self.A0/self.Q)*np.cos(self.Om*t)+F/self.k))
+            dxdt = np.matmul(C1, x) + np.matmul(C2, (d+(self.A0/self.Q)*(np.cos(self.Om*t))+F/self.k))
             return dxdt
         return ode
-
+    
     def solve(self, d, t, x0 = None, **kwargs):
         &#34;&#34;&#34;
         Solves the ode and returns the solution.
@@ -623,12 +411,13 @@ The returned force has dimension of [1e-9N].</dd>
         t : 1D numpy array
             Time to evaluate the ode solutions. Must be sorted in increasing order.
         x0 : Numpy array with shape (2, 1)
-            Initial value for the state vector. If none is given, x0 = [Om*A0/sqrt(Q^2(1-Om^2)^2 + Om^2), d]. 
+            Initial value for the state vector. If none is given, x0 = [0, d]. 
         kwargs : dict
             Keyword arguments for scipy.integrate.solve_ivp.
         &#34;&#34;&#34;
         if x0 == None:
-            x0 = np.array([self.Om*self.A0/np.sqrt(self.Q**2*(1-self.Om**2)**2 + self.Om**2), d])
+            x0 = np.array([0., d])
+            #x0 = np.array([self.Om*self.A0/np.sqrt(self.Q**2*(1-self.Om**2)**2 + self.Om**2), d])
         sol = solve_ivp(self.get_ode(d), (t[0], t[-1]), x0, t_eval = t, vectorized = True, **kwargs)
 
         return sol</code></pre>
@@ -687,7 +476,7 @@ k is the number of different x vectors in a single batch.</dd>
     
     def ode(t, x): 
         F = self.Fint(x)
-        dxdt = np.matmul(C1, x) + np.matmul(C2, (d+(self.A0/self.Q)*np.cos(self.Om*t)+F/self.k))
+        dxdt = np.matmul(C1, x) + np.matmul(C2, (d+(self.A0/self.Q)*(np.cos(self.Om*t))+F/self.k))
         return dxdt
     return ode</code></pre>
 </details>
@@ -704,7 +493,7 @@ k is the number of different x vectors in a single batch.</dd>
 <dt><strong><code>t</code></strong> :&ensp;<code>1D</code> <code>numpy</code> <code>array</code></dt>
 <dd>Time to evaluate the ode solutions. Must be sorted in increasing order.</dd>
 <dt><strong><code>x0</code></strong> :&ensp;<code>Numpy</code> <code>array</code> <code>with</code> <code>shape</code> (<code>2</code>, <code>1</code>)</dt>
-<dd>Initial value for the state vector. If none is given, x0 = [Om*A0/sqrt(Q^2(1-Om^2)^2 + Om^2), d].</dd>
+<dd>Initial value for the state vector. If none is given, x0 = [0, d].</dd>
 <dt><strong><code>kwargs</code></strong> :&ensp;<code>dict</code></dt>
 <dd>Keyword arguments for scipy.integrate.solve_ivp.</dd>
 </dl></section>
@@ -723,12 +512,13 @@ k is the number of different x vectors in a single batch.</dd>
     t : 1D numpy array
         Time to evaluate the ode solutions. Must be sorted in increasing order.
     x0 : Numpy array with shape (2, 1)
-        Initial value for the state vector. If none is given, x0 = [Om*A0/sqrt(Q^2(1-Om^2)^2 + Om^2), d]. 
+        Initial value for the state vector. If none is given, x0 = [0, d]. 
     kwargs : dict
         Keyword arguments for scipy.integrate.solve_ivp.
     &#34;&#34;&#34;
     if x0 == None:
-        x0 = np.array([self.Om*self.A0/np.sqrt(self.Q**2*(1-self.Om**2)**2 + self.Om**2), d])
+        x0 = np.array([0., d])
+        #x0 = np.array([self.Om*self.A0/np.sqrt(self.Q**2*(1-self.Om**2)**2 + self.Om**2), d])
     sol = solve_ivp(self.get_ode(d), (t[0], t[-1]), x0, t_eval = t, vectorized = True, **kwargs)
 
     return sol</code></pre>
@@ -757,12 +547,6 @@ k is the number of different x vectors in a single batch.</dd>
 </li>
 <li><h3><a href="#header-classes">Classes</a></h3>
 <ul>
-<li>
-<h4><code><a title="cp_detection.ForceSimulation.DMT_Maugis" href="#cp_detection.ForceSimulation.DMT_Maugis">DMT_Maugis</a></code></h4>
-<ul class="">
-<li><code><a title="cp_detection.ForceSimulation.DMT_Maugis.F" href="#cp_detection.ForceSimulation.DMT_Maugis.F">F</a></code></li>
-</ul>
-</li>
 <li>
 <h4><code><a title="cp_detection.ForceSimulation.ForcedHarmonicOscillator" href="#cp_detection.ForceSimulation.ForcedHarmonicOscillator">ForcedHarmonicOscillator</a></code></h4>
 <ul class="">

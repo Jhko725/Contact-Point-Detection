@@ -28,7 +28,7 @@
 import os
 import json
 import numpy as np
-from .ApproachCurve import ApproachCurve
+from .ApproachCurve import SimpleAppCurve
 
 def FileParser(data_dir, data_type, data_format = &#39;txt&#39;):
     &#34;&#34;&#34;
@@ -196,7 +196,7 @@ class Json2App():
         return Am, Pm, A0
 
     def __call__(self, type_ = &#39;both&#39;):
-        app_curve = ApproachCurve(type_, self.filepath, self.z, self.Am, self.Pm, self.f, self.res_params[&#39;f0&#39;], self.res_params[&#39;Q&#39;], self.A0)
+        app_curve = SimpleAppCurve(type_, self.filepath, self.z, self.Am, self.Pm, self.f, self.res_params[&#39;f0&#39;], self.res_params[&#39;Q&#39;], self.A0)
         return app_curve</code></pre>
 </details>
 </section>
@@ -446,7 +446,7 @@ If this flag is set to True or the json file does not contain the field "phas_of
         return Am, Pm, A0
 
     def __call__(self, type_ = &#39;both&#39;):
-        app_curve = ApproachCurve(type_, self.filepath, self.z, self.Am, self.Pm, self.f, self.res_params[&#39;f0&#39;], self.res_params[&#39;Q&#39;], self.A0)
+        app_curve = SimpleAppCurve(type_, self.filepath, self.z, self.Am, self.Pm, self.f, self.res_params[&#39;f0&#39;], self.res_params[&#39;Q&#39;], self.A0)
         return app_curve</code></pre>
 </details>
 </dd>

@@ -7,7 +7,7 @@ from scipy.integrate import simps
 from tqdm import tqdm
 import json
 import glob, os
-import quadpy
+#import quadpy
 
 ### This module imports all data and returns :\
 # 0) appended dictionary of keys
