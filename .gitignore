@@ -1,2 +1,3 @@
 # Ignore all contents inside ./Data
-/Data/*
+/Data/Experiment/*
+/lightning_logs

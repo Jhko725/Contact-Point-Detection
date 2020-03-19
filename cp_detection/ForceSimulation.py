@@ -82,7 +82,7 @@ class ForcedHarmonicOscillator():
         
         def ode(t, x): 
             F = self.Fint(x)
-            dxdt = np.matmul(C1, x) + np.matmul(C2, (d+(self.A0/self.Q)*(np.cos(self.Om*t/(1-0.001))+np.cos((1+0.001)*self.Om*t))+F/self.k))
+            dxdt = np.matmul(C1, x) + np.matmul(C2, (d+(self.A0/self.Q)*(np.cos(self.Om*t))+F/self.k))
             return dxdt
         return ode
     
