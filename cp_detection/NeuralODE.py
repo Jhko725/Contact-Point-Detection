@@ -7,7 +7,7 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 from torchdiffeq import odeint_adjoint as odeint
 import matplotlib.pyplot as plt
-import json, sys, os
+import json, sys, os, inspect
 
 class GeneralModeDataset(Dataset):
     """
@@ -33,6 +33,10 @@ class GeneralModeDataset(Dataset):
         self.x0_array = np.zeros((self.d_array.size, 2))
         self.x0_array[:,1] = self.d_array
 
+    def __repr__(self):
+        repr_str = 'A general mode dataset with ODE parameters: ' + ', '.join('{} = {}'.format(k, v) for k, v in self.ode_params.items())
+        return repr_str
+
     def __len__(self):
         return len(self.d_array)
 
@@ -47,16 +51,40 @@ class GeneralModeDataset(Dataset):
         """
         return self.ode_params == other.ode_params
 
-    def PlotData(self, idx, figsize = (7, 5), fontsize = 14):
-        data = self.__getitem__(idx)
+    def AddNoise(self, SNR, seed = None):
+        """
+        Returns a new GeneralModeDataset object with added Gaussian noise corresponding to SNR
+        SNR is defined as $SNR = <z^2(t)>/\sigma^2$, where $noise ~ N(0, \sigma^2)$
+        """
+        np.random.seed(seed)
+        sqr_avg = np.mean(self.z_array**2, axis = -1)
+        var = sqr_avg/SNR
+
+        noise = np.stack([np.random.normal(0, v, size = self.z_array.shape[-1]) for v in var], axis = 0)
         
-        fig, ax = plt.subplots(1, 1, figsize = figsize)
-        ax.plot(data['time'], data['z'], '.k')
+        noisy_dataset = GeneralModeDataset(**self._savedict())
+        noisy_dataset.z_array += noise
+
+        return noisy_dataset
+
+    def PlotData(self, idx, ax, fontsize = 14, **kwargs):
+        data = self.__getitem__(idx)
+        z = data['z']
+        t = data['time'][-len(z):]
+        ax.scatter(t, z, **kwargs)
         ax.grid(ls = '--')
         ax.set_xlabel('Normalized Time', fontsize = fontsize)
         ax.set_ylabel('z (nm)', fontsize = fontsize)
 
-        return fig, ax
+        return ax
+
+    def _savedict(self):
+        """
+        Creates a dictionary containing only the necessary entries for the class constructor
+        Directly unpacking self.__dict__ into the constructor raises errors due to class attributes originally not present in the constructor arguments
+        """
+        savedict = {k: v for k, v in self.__dict__.items() if k in [p.name for p in inspect.signature(self.__init__).parameters.values()]}
+        return savedict
 
     def save(self, savepath):
         """
@@ -67,10 +95,15 @@ class GeneralModeDataset(Dataset):
         savepath : path
             Path to save the dataset at.
         """
+        savedict = self._savedict()
+        for k, v in savedict.items():
+            if isinstance(v, np.ndarray):
+                savedict[k] = v.tolist()
+
         with open(savepath, 'w') as savefile:
-            json.dump(self.__dict__, savefile)
+            json.dump(savedict, savefile)
         print('Saved data to: {}'.format(savepath))
-    
+
     @classmethod
     def load(cls, loadpath):
         """
