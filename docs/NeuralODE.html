@@ -30,15 +30,17 @@ import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 import pytorch_lightning as pl
+from pytorch_lightning.callbacks import ModelCheckpoint
 from torchdiffeq import odeint_adjoint as odeint
 import matplotlib.pyplot as plt
+import json, sys, os, inspect
 
 class GeneralModeDataset(Dataset):
     &#34;&#34;&#34;
     A PyTorch Dataset to handle general mode AFM data. 
     &#34;&#34;&#34;
 
-    def __init__(self, t, d_list, x0, z_list, ode_params):
+    def __init__(self, t, d_array, z_array, ode_params):
         &#34;&#34;&#34;
         Parameters
         ----------
@@ -50,16 +52,23 @@ class GeneralModeDataset(Dataset):
         &#34;&#34;&#34;
         # Needs modifying - in the final form, we do not necessarily need x0 in both the model and the dataset
         self.t = np.array(t)
-        self.d_list = d_list
-        self.z_list = z_list
+        self.d_array = np.array(d_array)
+        self.z_array = np.array(z_array)
         self.ode_params = ode_params
-        self.x0 = x0
+        # Need to modify x0_array later
+        self.x0_array = np.zeros((self.d_array.size, 2))
+        self.x0_array[:,1] = self.d_array
+
+    def __repr__(self):
+        repr_str = &#39;A general mode dataset with ODE parameters: &#39; + &#39;, &#39;.join(&#39;{} = {}&#39;.format(k, v) for k, v in self.ode_params.items())
+        return repr_str
 
     def __len__(self):
-        return len(self.d_list)
+        return len(self.d_array)
 
     def __getitem__(self, idx):
-        sample = {&#39;time&#39;: self.t, &#39;d&#39;: self.d_list[idx], &#39;x0&#39;: self.x0, &#39;z&#39;: self.z_list[idx][:]}
+        #sample = {&#39;time&#39;: self.t, &#39;d&#39;: self.d_list[idx], &#39;x0&#39;: self.x0, &#39;z&#39;: self.z_list[idx][:]}
+        sample = {&#39;time&#39;: self.t, &#39;d&#39;: self.d_array[idx], &#39;x0&#39;: self.x0_array[idx][:],&#39;z&#39;: self.z_array[idx][:]}
         return sample
 
     def __eq__(self, other):
@@ -68,16 +77,78 @@ class GeneralModeDataset(Dataset):
         &#34;&#34;&#34;
         return self.ode_params == other.ode_params
 
-    def PlotData(self, idx, figsize = (7, 5), fontsize = 14):
-        data = self.__getitem__(idx)
+    def AddNoise(self, SNR, seed = None):
+        &#34;&#34;&#34;
+        Returns a new GeneralModeDataset object with added Gaussian noise corresponding to SNR
+        SNR is defined as $SNR = &lt;z^2(t)&gt;/\sigma^2$, where $noise ~ N(0, \sigma^2)$
+        &#34;&#34;&#34;
+        np.random.seed(seed)
+        sqr_avg = np.mean(self.z_array**2, axis = -1)
+        var = sqr_avg/SNR
+
+        noise = np.stack([np.random.normal(0, v, size = self.z_array.shape[-1]) for v in var], axis = 0)
         
-        fig, ax = plt.subplots(1, 1, figsize = figsize)
-        ax.plot(data[&#39;time&#39;], data[&#39;z&#39;], &#39;.k&#39;)
+        noisy_dataset = GeneralModeDataset(**self._savedict())
+        noisy_dataset.z_array += noise
+
+        return noisy_dataset
+
+    def PlotData(self, idx, ax, fontsize = 14, **kwargs):
+        data = self.__getitem__(idx)
+        z = data[&#39;z&#39;]
+        t = data[&#39;time&#39;][-len(z):]
+        ax.scatter(t, z, **kwargs)
         ax.grid(ls = &#39;--&#39;)
         ax.set_xlabel(&#39;Normalized Time&#39;, fontsize = fontsize)
         ax.set_ylabel(&#39;z (nm)&#39;, fontsize = fontsize)
 
-        return fig, ax
+        return ax
+
+    def _savedict(self):
+        &#34;&#34;&#34;
+        Creates a dictionary containing only the necessary entries for the class constructor
+        Directly unpacking self.__dict__ into the constructor raises errors due to class attributes originally not present in the constructor arguments
+        &#34;&#34;&#34;
+        savedict = {k: v for k, v in self.__dict__.items() if k in [p.name for p in inspect.signature(self.__init__).parameters.values()]}
+        return savedict
+
+    def save(self, savepath):
+        &#34;&#34;&#34;
+        Saves the given dataset in json format.
+
+        Parameters
+        ----------
+        savepath : path
+            Path to save the dataset at.
+        &#34;&#34;&#34;
+        savedict = self._savedict()
+        for k, v in savedict.items():
+            if isinstance(v, np.ndarray):
+                savedict[k] = v.tolist()
+
+        with open(savepath, &#39;w&#39;) as savefile:
+            json.dump(savedict, savefile)
+        print(&#39;Saved data to: {}&#39;.format(savepath))
+
+    @classmethod
+    def load(cls, loadpath):
+        &#34;&#34;&#34;
+        Loads the dataset from a json file.
+
+        Parameters
+        ----------
+        loadpath : path
+            Path to the json file to be loaded.
+        
+        Returns
+        -------
+        dataset : An instance of the class GeneralModeDataset 
+            Loaded dataset.
+        &#34;&#34;&#34;
+        with open(loadpath) as loadfile:
+            data_dict = json.load(loadfile)
+        
+        return cls(**data_dict)
 
 class F_cons(nn.Module):
     &#34;&#34;&#34;
@@ -112,7 +183,7 @@ class F_cons(nn.Module):
             List of the nodes in each of the hidden layers of the model
         &#34;&#34;&#34;
         super(F_cons, self).__init__()
-        self.hidden_nodes = list(hidden_nodes)
+        self.hidden_nodes = np.array(hidden_nodes, dtype = int)
         self.layers = nn.ModuleList()
         for i in range(len(self.hidden_nodes)):
             if i == 0:
@@ -127,7 +198,7 @@ class F_cons(nn.Module):
         # Initialize weights and biases
         for m in self.modules():
             if isinstance(m, nn.Linear):
-                nn.init.normal_(m.weight, mean=0, std=1.0e-4)
+                nn.init.normal_(m.weight, mean=0, std=1.0e-5)
                 nn.init.constant_(m.bias, val=0)
 
     def forward(self, z):
@@ -274,7 +345,7 @@ class LightningTrainer(pl.LightningModule):
     &#34;&#34;&#34;
 
     #def __init__(self, train_dataset, lr = 0.05, hidden_nodes = [10, 10], batch_size = 1, solver = &#39;dopri5&#39;):
-    def __init__(self, hparams):
+    def __init__(self, hparams, verbose = True):
         &#34;&#34;&#34;
         Parameters
         ----------
@@ -293,17 +364,19 @@ class LightningTrainer(pl.LightningModule):
         &#34;&#34;&#34;
         super(LightningTrainer, self).__init__()
         self.hparams = hparams
-        self.train_dataset = self.hparams.train_dataset
+        self.train_dataset = GeneralModeDataset.load(self.hparams.train_dataset_path)
         ode_params = self.train_dataset.ode_params
         self.ODE = AFM_NeuralODE(**ode_params, hidden_nodes = self.hparams.hidden_nodes)
         self.batch_size = self.hparams.batch_size
         self.lr = self.hparams.lr
         self.solver = self.hparams.solver
+        self._verbose = verbose
+        self._fft_loss = self.hparams.fft_loss
 
     def forward(self, t, x0, d):
         self.ODE.d = d.view(self.batch_size, 1)
 
-        x_pred = odeint(self.ODE, x0, t, method = self.solver)
+        x_pred = odeint(self.ODE, x0, t, method = self.solver, rtol = 1e-6)
         # x_pred has shape = [time, batch_size, 2]. Permute z_pred so that it has shape = [batch_size, time]
         z_pred = x_pred[:,:,1].permute(1,0)
 
@@ -314,21 +387,37 @@ class LightningTrainer(pl.LightningModule):
         x0 = batch[&#39;x0&#39;].float()
         d = batch[&#39;d&#39;].float()
 
-        z_pred = self.forward(t, x0, d)
         z_true = batch[&#39;z&#39;].float()
+        N_data = z_true.size(1) # length of the validation data
+        
+        if self._verbose:
+            sys.stdout.write(&#39;\r&#39;)
+            sys.stdout.write(&#39;Forward-propagating...&#39;)
+            sys.stdout.flush()
 
-        log1pI_pred = self.LogSpectra(z_pred)
-        log1pI_true = self.LogSpectra(z_true)
-
+        z_pred = self.forward(t, x0, d)[:, -N_data:]
         loss_function = nn.MSELoss()
-        loss = loss_function(log1pI_pred, log1pI_true)
+        if self._fft_loss:
+            log1pI_pred = self.LogSpectra(z_pred)
+            log1pI_true = self.LogSpectra(z_true)
+
+            loss = loss_function(log1pI_pred, log1pI_true)
+        else:
+            loss = loss_function(z_true, z_pred)
+
+        if self._verbose:
+            sys.stdout.write(&#39;\r&#39;)
+            sys.stdout.write(&#39;Backward-propagating...&#39;)
+            sys.stdout.flush()
 
         tensorboard_logs = {&#39;train_loss&#39;: loss}
         return {&#39;loss&#39;: loss, &#39;log&#39;: tensorboard_logs}
 
-    @pl.data_loader
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size = self.batch_size, shuffle = True)
+
+    def validation_step(self, batch, batch_nb):
+        pass
 
     @staticmethod
     def LogSpectra(z):
@@ -348,10 +437,10 @@ class LightningTrainer(pl.LightningModule):
 
         z_fft = torch.rfft(z, 1)
         #z_I = torch.sum(z_fft**2, dim = -1)
-        z_log1pI = torch.norm(z_fft, p = 2, dim = -1)
+        #z_log1pI = torch.norm(z_fft, p = 2, dim = -1)
         #z_log1pI = torch.log1p(z_I)
 
-        return z_log1pI
+        return z_fft
 
     def configure_optimizers(self):
         optim = torch.optim.Adam(self.parameters(), lr = self.lr)
@@ -368,38 +457,40 @@ class LightningTrainer(pl.LightningModule):
         F_pred = self.ODE.Fc(d_tensor).cpu().detach().numpy()
         return F_pred
 
-def TrainModel(model, max_epochs = 10000, checkpoint_path = &#39;./checkpoints&#39;):
-    &#34;&#34;&#34;
-    Trains the model using PyTorch_Lightning.trainer. 
+    def TrainModel(self, max_epochs = 10000, checkpoint_path = &#39;./checkpoints&#39;):
+        &#34;&#34;&#34;
+        Trains the model using PyTorch_Lightning.trainer. 
 
-    Parameters
-    ----------
-    model : An instance of PyTorch_Lightning.LightningModule
-        Neural network to be trained. 
-    max_epochs : integer
-        Maximum number of training.
-    checkpoint_path : path
-        Path to save the checkpointed model during training.
-    &#34;&#34;&#34;
-    checkpoint_callback = pl.ModelCheckpoint(filepath = checkpoint_path, save_best_only = True, verbose = True, monitor = &#39;loss&#39;, mode = &#39;min&#39;, prefix = &#39;&#39;)
-    trainer = pl.Trainer(gpus = 1, early_stop_callback = None, checkpoint_callback = checkpoint_callback, show_progress_bar = True, max_nb_epochs = max_epochs)
-    trainer.fit(model)
+        Parameters
+        ----------
+        model : An instance of PyTorch_Lightning.LightningModule
+            Neural network to be trained. 
+        max_epochs : integer
+            Maximum number of training.
+        checkpoint_path : path
+            Path to save the checkpointed model during training.
+        &#34;&#34;&#34;
+        #logger = TensorBoardLogger(save_dir = os.getcwd(), version = self.slurm_job_id, name = &#39;lightning_logs&#39;)
+        checkpoint_callback = ModelCheckpoint(filepath = checkpoint_path, save_top_k = 1, verbose = True, monitor = &#39;loss&#39;, mode = &#39;min&#39;)
+        trainer = pl.Trainer(gpus = 1, checkpoint_callback = checkpoint_callback, early_stop_callback = None, show_progress_bar = True, max_nb_epochs = max_epochs, log_save_interval = 1)
+        trainer.fit(self)
 
-def LoadModel(checkpoint_path):
-    &#34;&#34;&#34;
-    Loads the checkpointed model from checkpoint_path. 
+    @classmethod
+    def LoadModel(cls, checkpoint_path):
+        &#34;&#34;&#34;
+        Loads the checkpointed model from checkpoint_path. 
 
-    Parameters
-    ----------
-    checkpoint_path : path
-        Path to load the checkpointed model from.
+        Parameters
+        ----------
+        checkpoint_path : path
+            Path to load the checkpointed model from.
 
-    Returns
-    -------
-    loaded_model : An instance of PyTorch_Lightning.LightningModule
-        Loaded neural network.
-    &#34;&#34;&#34;
-    return LightningTrainer.load_from_checkpoint(checkpoint_path)</code></pre>
+        Returns
+        -------
+        loaded_model : An instance of PyTorch_Lightning.LightningModule
+            Loaded neural network.
+        &#34;&#34;&#34;
+        return cls.load_from_checkpoint(checkpoint_path)</code></pre>
 </details>
 </section>
 <section>
@@ -407,81 +498,6 @@ def LoadModel(checkpoint_path):
 <section>
 </section>
 <section>
-<h2 class="section-title" id="header-functions">Functions</h2>
-<dl>
-<dt id="cp_detection.NeuralODE.LoadModel"><code class="name flex">
-<span>def <span class="ident">LoadModel</span></span>(<span>checkpoint_path)</span>
-</code></dt>
-<dd>
-<section class="desc"><p>Loads the checkpointed model from checkpoint_path. </p>
-<h2 id="parameters">Parameters</h2>
-<dl>
-<dt><strong><code>checkpoint_path</code></strong> :&ensp;<code>path</code></dt>
-<dd>Path to load the checkpointed model from.</dd>
-</dl>
-<h2 id="returns">Returns</h2>
-<dl>
-<dt><strong><code>loaded_model</code></strong> :&ensp;<code>An</code> <code>instance</code> of <code>PyTorch_Lightning.LightningModule</code></dt>
-<dd>Loaded neural network.</dd>
-</dl></section>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def LoadModel(checkpoint_path):
-    &#34;&#34;&#34;
-    Loads the checkpointed model from checkpoint_path. 
-
-    Parameters
-    ----------
-    checkpoint_path : path
-        Path to load the checkpointed model from.
-
-    Returns
-    -------
-    loaded_model : An instance of PyTorch_Lightning.LightningModule
-        Loaded neural network.
-    &#34;&#34;&#34;
-    return LightningTrainer.load_from_checkpoint(checkpoint_path)</code></pre>
-</details>
-</dd>
-<dt id="cp_detection.NeuralODE.TrainModel"><code class="name flex">
-<span>def <span class="ident">TrainModel</span></span>(<span>model, max_epochs=10000, checkpoint_path='./checkpoints')</span>
-</code></dt>
-<dd>
-<section class="desc"><p>Trains the model using PyTorch_Lightning.trainer. </p>
-<h2 id="parameters">Parameters</h2>
-<dl>
-<dt><strong><code>model</code></strong> :&ensp;<code>An</code> <code>instance</code> of <code>PyTorch_Lightning.LightningModule</code></dt>
-<dd>Neural network to be trained.</dd>
-<dt><strong><code>max_epochs</code></strong> :&ensp;<code>integer</code></dt>
-<dd>Maximum number of training.</dd>
-<dt><strong><code>checkpoint_path</code></strong> :&ensp;<code>path</code></dt>
-<dd>Path to save the checkpointed model during training.</dd>
-</dl></section>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def TrainModel(model, max_epochs = 10000, checkpoint_path = &#39;./checkpoints&#39;):
-    &#34;&#34;&#34;
-    Trains the model using PyTorch_Lightning.trainer. 
-
-    Parameters
-    ----------
-    model : An instance of PyTorch_Lightning.LightningModule
-        Neural network to be trained. 
-    max_epochs : integer
-        Maximum number of training.
-    checkpoint_path : path
-        Path to save the checkpointed model during training.
-    &#34;&#34;&#34;
-    checkpoint_callback = pl.ModelCheckpoint(filepath = checkpoint_path, save_best_only = True, verbose = True, monitor = &#39;loss&#39;, mode = &#39;min&#39;, prefix = &#39;&#39;)
-    trainer = pl.Trainer(gpus = 1, early_stop_callback = None, checkpoint_callback = checkpoint_callback, show_progress_bar = True, max_nb_epochs = max_epochs)
-    trainer.fit(model)</code></pre>
-</details>
-</dd>
-</dl>
 </section>
 <section>
 <h2 class="section-title" id="header-classes">Classes</h2>
@@ -755,7 +771,7 @@ z is assumed to be a tensor with size [1].</p>
             List of the nodes in each of the hidden layers of the model
         &#34;&#34;&#34;
         super(F_cons, self).__init__()
-        self.hidden_nodes = list(hidden_nodes)
+        self.hidden_nodes = np.array(hidden_nodes, dtype = int)
         self.layers = nn.ModuleList()
         for i in range(len(self.hidden_nodes)):
             if i == 0:
@@ -770,7 +786,7 @@ z is assumed to be a tensor with size [1].</p>
         # Initialize weights and biases
         for m in self.modules():
             if isinstance(m, nn.Linear):
-                nn.init.normal_(m.weight, mean=0, std=1.0e-4)
+                nn.init.normal_(m.weight, mean=0, std=1.0e-5)
                 nn.init.constant_(m.bias, val=0)
 
     def forward(self, z):
@@ -848,7 +864,7 @@ Neural network output. Represents the modeled tip-sample force.</p></section>
 </dd>
 <dt id="cp_detection.NeuralODE.GeneralModeDataset"><code class="flex name class">
 <span>class <span class="ident">GeneralModeDataset</span></span>
-<span>(</span><span>t, d_list, x0, z_list, ode_params)</span>
+<span>(</span><span>t, d_array, z_array, ode_params)</span>
 </code></dt>
 <dd>
 <section class="desc"><p>A PyTorch Dataset to handle general mode AFM data. </p>
@@ -869,7 +885,7 @@ Required form is ode_params = {'A0' : float, 'Q' : float, 'Om' : float, 'k' : fl
     A PyTorch Dataset to handle general mode AFM data. 
     &#34;&#34;&#34;
 
-    def __init__(self, t, d_list, x0, z_list, ode_params):
+    def __init__(self, t, d_array, z_array, ode_params):
         &#34;&#34;&#34;
         Parameters
         ----------
@@ -881,16 +897,23 @@ Required form is ode_params = {'A0' : float, 'Q' : float, 'Om' : float, 'k' : fl
         &#34;&#34;&#34;
         # Needs modifying - in the final form, we do not necessarily need x0 in both the model and the dataset
         self.t = np.array(t)
-        self.d_list = d_list
-        self.z_list = z_list
+        self.d_array = np.array(d_array)
+        self.z_array = np.array(z_array)
         self.ode_params = ode_params
-        self.x0 = x0
+        # Need to modify x0_array later
+        self.x0_array = np.zeros((self.d_array.size, 2))
+        self.x0_array[:,1] = self.d_array
+
+    def __repr__(self):
+        repr_str = &#39;A general mode dataset with ODE parameters: &#39; + &#39;, &#39;.join(&#39;{} = {}&#39;.format(k, v) for k, v in self.ode_params.items())
+        return repr_str
 
     def __len__(self):
-        return len(self.d_list)
+        return len(self.d_array)
 
     def __getitem__(self, idx):
-        sample = {&#39;time&#39;: self.t, &#39;d&#39;: self.d_list[idx], &#39;x0&#39;: self.x0, &#39;z&#39;: self.z_list[idx][:]}
+        #sample = {&#39;time&#39;: self.t, &#39;d&#39;: self.d_list[idx], &#39;x0&#39;: self.x0, &#39;z&#39;: self.z_list[idx][:]}
+        sample = {&#39;time&#39;: self.t, &#39;d&#39;: self.d_array[idx], &#39;x0&#39;: self.x0_array[idx][:],&#39;z&#39;: self.z_array[idx][:]}
         return sample
 
     def __eq__(self, other):
@@ -899,25 +922,157 @@ Required form is ode_params = {'A0' : float, 'Q' : float, 'Om' : float, 'k' : fl
         &#34;&#34;&#34;
         return self.ode_params == other.ode_params
 
-    def PlotData(self, idx, figsize = (7, 5), fontsize = 14):
-        data = self.__getitem__(idx)
+    def AddNoise(self, SNR, seed = None):
+        &#34;&#34;&#34;
+        Returns a new GeneralModeDataset object with added Gaussian noise corresponding to SNR
+        SNR is defined as $SNR = &lt;z^2(t)&gt;/\sigma^2$, where $noise ~ N(0, \sigma^2)$
+        &#34;&#34;&#34;
+        np.random.seed(seed)
+        sqr_avg = np.mean(self.z_array**2, axis = -1)
+        var = sqr_avg/SNR
+
+        noise = np.stack([np.random.normal(0, v, size = self.z_array.shape[-1]) for v in var], axis = 0)
         
-        fig, ax = plt.subplots(1, 1, figsize = figsize)
-        ax.plot(data[&#39;time&#39;], data[&#39;z&#39;], &#39;.k&#39;)
+        noisy_dataset = GeneralModeDataset(**self._savedict())
+        noisy_dataset.z_array += noise
+
+        return noisy_dataset
+
+    def PlotData(self, idx, ax, fontsize = 14, **kwargs):
+        data = self.__getitem__(idx)
+        z = data[&#39;z&#39;]
+        t = data[&#39;time&#39;][-len(z):]
+        ax.scatter(t, z, **kwargs)
         ax.grid(ls = &#39;--&#39;)
         ax.set_xlabel(&#39;Normalized Time&#39;, fontsize = fontsize)
         ax.set_ylabel(&#39;z (nm)&#39;, fontsize = fontsize)
 
-        return fig, ax</code></pre>
+        return ax
+
+    def _savedict(self):
+        &#34;&#34;&#34;
+        Creates a dictionary containing only the necessary entries for the class constructor
+        Directly unpacking self.__dict__ into the constructor raises errors due to class attributes originally not present in the constructor arguments
+        &#34;&#34;&#34;
+        savedict = {k: v for k, v in self.__dict__.items() if k in [p.name for p in inspect.signature(self.__init__).parameters.values()]}
+        return savedict
+
+    def save(self, savepath):
+        &#34;&#34;&#34;
+        Saves the given dataset in json format.
+
+        Parameters
+        ----------
+        savepath : path
+            Path to save the dataset at.
+        &#34;&#34;&#34;
+        savedict = self._savedict()
+        for k, v in savedict.items():
+            if isinstance(v, np.ndarray):
+                savedict[k] = v.tolist()
+
+        with open(savepath, &#39;w&#39;) as savefile:
+            json.dump(savedict, savefile)
+        print(&#39;Saved data to: {}&#39;.format(savepath))
+
+    @classmethod
+    def load(cls, loadpath):
+        &#34;&#34;&#34;
+        Loads the dataset from a json file.
+
+        Parameters
+        ----------
+        loadpath : path
+            Path to the json file to be loaded.
+        
+        Returns
+        -------
+        dataset : An instance of the class GeneralModeDataset 
+            Loaded dataset.
+        &#34;&#34;&#34;
+        with open(loadpath) as loadfile:
+            data_dict = json.load(loadfile)
+        
+        return cls(**data_dict)</code></pre>
 </details>
 <h3>Ancestors</h3>
 <ul class="hlist">
 <li>torch.utils.data.dataset.Dataset</li>
 </ul>
+<h3>Static methods</h3>
+<dl>
+<dt id="cp_detection.NeuralODE.GeneralModeDataset.load"><code class="name flex">
+<span>def <span class="ident">load</span></span>(<span>loadpath)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Loads the dataset from a json file.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>loadpath</code></strong> :&ensp;<code>path</code></dt>
+<dd>Path to the json file to be loaded.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>dataset</code></strong> :&ensp;<code>An</code> <code>instance</code> of <code>the</code> <code>class</code> <a title="cp_detection.NeuralODE.GeneralModeDataset" href="#cp_detection.NeuralODE.GeneralModeDataset"><code>GeneralModeDataset</code></a></dt>
+<dd>Loaded dataset.</dd>
+</dl></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@classmethod
+def load(cls, loadpath):
+    &#34;&#34;&#34;
+    Loads the dataset from a json file.
+
+    Parameters
+    ----------
+    loadpath : path
+        Path to the json file to be loaded.
+    
+    Returns
+    -------
+    dataset : An instance of the class GeneralModeDataset 
+        Loaded dataset.
+    &#34;&#34;&#34;
+    with open(loadpath) as loadfile:
+        data_dict = json.load(loadfile)
+    
+    return cls(**data_dict)</code></pre>
+</details>
+</dd>
+</dl>
 <h3>Methods</h3>
 <dl>
+<dt id="cp_detection.NeuralODE.GeneralModeDataset.AddNoise"><code class="name flex">
+<span>def <span class="ident">AddNoise</span></span>(<span>self, SNR, seed=None)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Returns a new GeneralModeDataset object with added Gaussian noise corresponding to SNR
+SNR is defined as $SNR = <z^2(t)>/\sigma^2$, where $noise ~ N(0, \sigma^2)$</p></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def AddNoise(self, SNR, seed = None):
+    &#34;&#34;&#34;
+    Returns a new GeneralModeDataset object with added Gaussian noise corresponding to SNR
+    SNR is defined as $SNR = &lt;z^2(t)&gt;/\sigma^2$, where $noise ~ N(0, \sigma^2)$
+    &#34;&#34;&#34;
+    np.random.seed(seed)
+    sqr_avg = np.mean(self.z_array**2, axis = -1)
+    var = sqr_avg/SNR
+
+    noise = np.stack([np.random.normal(0, v, size = self.z_array.shape[-1]) for v in var], axis = 0)
+    
+    noisy_dataset = GeneralModeDataset(**self._savedict())
+    noisy_dataset.z_array += noise
+
+    return noisy_dataset</code></pre>
+</details>
+</dd>
 <dt id="cp_detection.NeuralODE.GeneralModeDataset.PlotData"><code class="name flex">
-<span>def <span class="ident">PlotData</span></span>(<span>self, idx, figsize=(7, 5), fontsize=14)</span>
+<span>def <span class="ident">PlotData</span></span>(<span>self, idx, ax, fontsize=14, **kwargs)</span>
 </code></dt>
 <dd>
 <section class="desc"></section>
@@ -925,23 +1080,56 @@ Required form is ode_params = {'A0' : float, 'Q' : float, 'Om' : float, 'k' : fl
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def PlotData(self, idx, figsize = (7, 5), fontsize = 14):
+<pre><code class="python">def PlotData(self, idx, ax, fontsize = 14, **kwargs):
     data = self.__getitem__(idx)
-    
-    fig, ax = plt.subplots(1, 1, figsize = figsize)
-    ax.plot(data[&#39;time&#39;], data[&#39;z&#39;], &#39;.k&#39;)
+    z = data[&#39;z&#39;]
+    t = data[&#39;time&#39;][-len(z):]
+    ax.scatter(t, z, **kwargs)
     ax.grid(ls = &#39;--&#39;)
     ax.set_xlabel(&#39;Normalized Time&#39;, fontsize = fontsize)
     ax.set_ylabel(&#39;z (nm)&#39;, fontsize = fontsize)
 
-    return fig, ax</code></pre>
+    return ax</code></pre>
+</details>
+</dd>
+<dt id="cp_detection.NeuralODE.GeneralModeDataset.save"><code class="name flex">
+<span>def <span class="ident">save</span></span>(<span>self, savepath)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Saves the given dataset in json format.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>savepath</code></strong> :&ensp;<code>path</code></dt>
+<dd>Path to save the dataset at.</dd>
+</dl></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def save(self, savepath):
+    &#34;&#34;&#34;
+    Saves the given dataset in json format.
+
+    Parameters
+    ----------
+    savepath : path
+        Path to save the dataset at.
+    &#34;&#34;&#34;
+    savedict = self._savedict()
+    for k, v in savedict.items():
+        if isinstance(v, np.ndarray):
+            savedict[k] = v.tolist()
+
+    with open(savepath, &#39;w&#39;) as savefile:
+        json.dump(savedict, savefile)
+    print(&#39;Saved data to: {}&#39;.format(savepath))</code></pre>
 </details>
 </dd>
 </dl>
 </dd>
 <dt id="cp_detection.NeuralODE.LightningTrainer"><code class="flex name class">
 <span>class <span class="ident">LightningTrainer</span></span>
-<span>(</span><span>hparams)</span>
+<span>(</span><span>hparams, verbose=True)</span>
 </code></dt>
 <dd>
 <section class="desc"><p>A PyTorch-Lightning LightningModule for training the NeuralODE created by the class AFM_NeuralODE. </p>
@@ -1005,7 +1193,7 @@ Type of ODE solver to be used to solve the NeuralODE</p></section>
     &#34;&#34;&#34;
 
     #def __init__(self, train_dataset, lr = 0.05, hidden_nodes = [10, 10], batch_size = 1, solver = &#39;dopri5&#39;):
-    def __init__(self, hparams):
+    def __init__(self, hparams, verbose = True):
         &#34;&#34;&#34;
         Parameters
         ----------
@@ -1024,17 +1212,19 @@ Type of ODE solver to be used to solve the NeuralODE</p></section>
         &#34;&#34;&#34;
         super(LightningTrainer, self).__init__()
         self.hparams = hparams
-        self.train_dataset = self.hparams.train_dataset
+        self.train_dataset = GeneralModeDataset.load(self.hparams.train_dataset_path)
         ode_params = self.train_dataset.ode_params
         self.ODE = AFM_NeuralODE(**ode_params, hidden_nodes = self.hparams.hidden_nodes)
         self.batch_size = self.hparams.batch_size
         self.lr = self.hparams.lr
         self.solver = self.hparams.solver
+        self._verbose = verbose
+        self._fft_loss = self.hparams.fft_loss
 
     def forward(self, t, x0, d):
         self.ODE.d = d.view(self.batch_size, 1)
 
-        x_pred = odeint(self.ODE, x0, t, method = self.solver)
+        x_pred = odeint(self.ODE, x0, t, method = self.solver, rtol = 1e-6)
         # x_pred has shape = [time, batch_size, 2]. Permute z_pred so that it has shape = [batch_size, time]
         z_pred = x_pred[:,:,1].permute(1,0)
 
@@ -1045,21 +1235,37 @@ Type of ODE solver to be used to solve the NeuralODE</p></section>
         x0 = batch[&#39;x0&#39;].float()
         d = batch[&#39;d&#39;].float()
 
-        z_pred = self.forward(t, x0, d)
         z_true = batch[&#39;z&#39;].float()
+        N_data = z_true.size(1) # length of the validation data
+        
+        if self._verbose:
+            sys.stdout.write(&#39;\r&#39;)
+            sys.stdout.write(&#39;Forward-propagating...&#39;)
+            sys.stdout.flush()
 
-        log1pI_pred = self.LogSpectra(z_pred)
-        log1pI_true = self.LogSpectra(z_true)
-
+        z_pred = self.forward(t, x0, d)[:, -N_data:]
         loss_function = nn.MSELoss()
-        loss = loss_function(log1pI_pred, log1pI_true)
+        if self._fft_loss:
+            log1pI_pred = self.LogSpectra(z_pred)
+            log1pI_true = self.LogSpectra(z_true)
+
+            loss = loss_function(log1pI_pred, log1pI_true)
+        else:
+            loss = loss_function(z_true, z_pred)
+
+        if self._verbose:
+            sys.stdout.write(&#39;\r&#39;)
+            sys.stdout.write(&#39;Backward-propagating...&#39;)
+            sys.stdout.flush()
 
         tensorboard_logs = {&#39;train_loss&#39;: loss}
         return {&#39;loss&#39;: loss, &#39;log&#39;: tensorboard_logs}
 
-    @pl.data_loader
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size = self.batch_size, shuffle = True)
+
+    def validation_step(self, batch, batch_nb):
+        pass
 
     @staticmethod
     def LogSpectra(z):
@@ -1079,10 +1285,10 @@ Type of ODE solver to be used to solve the NeuralODE</p></section>
 
         z_fft = torch.rfft(z, 1)
         #z_I = torch.sum(z_fft**2, dim = -1)
-        z_log1pI = torch.norm(z_fft, p = 2, dim = -1)
+        #z_log1pI = torch.norm(z_fft, p = 2, dim = -1)
         #z_log1pI = torch.log1p(z_I)
 
-        return z_log1pI
+        return z_fft
 
     def configure_optimizers(self):
         optim = torch.optim.Adam(self.parameters(), lr = self.lr)
@@ -1097,18 +1303,91 @@ Type of ODE solver to be used to solve the NeuralODE</p></section>
         d = np.array(d)
         d_tensor = torch.from_numpy(d).cuda(non_blocking = True).float().reshape(-1, 1)
         F_pred = self.ODE.Fc(d_tensor).cpu().detach().numpy()
-        return F_pred</code></pre>
+        return F_pred
+
+    def TrainModel(self, max_epochs = 10000, checkpoint_path = &#39;./checkpoints&#39;):
+        &#34;&#34;&#34;
+        Trains the model using PyTorch_Lightning.trainer. 
+
+        Parameters
+        ----------
+        model : An instance of PyTorch_Lightning.LightningModule
+            Neural network to be trained. 
+        max_epochs : integer
+            Maximum number of training.
+        checkpoint_path : path
+            Path to save the checkpointed model during training.
+        &#34;&#34;&#34;
+        #logger = TensorBoardLogger(save_dir = os.getcwd(), version = self.slurm_job_id, name = &#39;lightning_logs&#39;)
+        checkpoint_callback = ModelCheckpoint(filepath = checkpoint_path, save_top_k = 1, verbose = True, monitor = &#39;loss&#39;, mode = &#39;min&#39;)
+        trainer = pl.Trainer(gpus = 1, checkpoint_callback = checkpoint_callback, early_stop_callback = None, show_progress_bar = True, max_nb_epochs = max_epochs, log_save_interval = 1)
+        trainer.fit(self)
+
+    @classmethod
+    def LoadModel(cls, checkpoint_path):
+        &#34;&#34;&#34;
+        Loads the checkpointed model from checkpoint_path. 
+
+        Parameters
+        ----------
+        checkpoint_path : path
+            Path to load the checkpointed model from.
+
+        Returns
+        -------
+        loaded_model : An instance of PyTorch_Lightning.LightningModule
+            Loaded neural network.
+        &#34;&#34;&#34;
+        return cls.load_from_checkpoint(checkpoint_path)</code></pre>
 </details>
 <h3>Ancestors</h3>
 <ul class="hlist">
-<li>pytorch_lightning.root_module.root_module.LightningModule</li>
-<li>pytorch_lightning.root_module.grads.GradInformation</li>
-<li>pytorch_lightning.root_module.model_saving.ModelIO</li>
-<li>pytorch_lightning.root_module.hooks.ModelHooks</li>
+<li>pytorch_lightning.core.lightning.LightningModule</li>
+<li>abc.ABC</li>
+<li>pytorch_lightning.core.grads.GradInformation</li>
+<li>pytorch_lightning.core.saving.ModelIO</li>
+<li>pytorch_lightning.core.hooks.ModelHooks</li>
 <li>torch.nn.modules.module.Module</li>
 </ul>
 <h3>Static methods</h3>
 <dl>
+<dt id="cp_detection.NeuralODE.LightningTrainer.LoadModel"><code class="name flex">
+<span>def <span class="ident">LoadModel</span></span>(<span>checkpoint_path)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Loads the checkpointed model from checkpoint_path. </p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>checkpoint_path</code></strong> :&ensp;<code>path</code></dt>
+<dd>Path to load the checkpointed model from.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>loaded_model</code></strong> :&ensp;<code>An</code> <code>instance</code> of <code>PyTorch_Lightning.LightningModule</code></dt>
+<dd>Loaded neural network.</dd>
+</dl></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@classmethod
+def LoadModel(cls, checkpoint_path):
+    &#34;&#34;&#34;
+    Loads the checkpointed model from checkpoint_path. 
+
+    Parameters
+    ----------
+    checkpoint_path : path
+        Path to load the checkpointed model from.
+
+    Returns
+    -------
+    loaded_model : An instance of PyTorch_Lightning.LightningModule
+        Loaded neural network.
+    &#34;&#34;&#34;
+    return cls.load_from_checkpoint(checkpoint_path)</code></pre>
+</details>
+</dd>
 <dt id="cp_detection.NeuralODE.LightningTrainer.LogSpectra"><code class="name flex">
 <span>def <span class="ident">LogSpectra</span></span>(<span>z)</span>
 </code></dt>
@@ -1146,21 +1425,114 @@ def LogSpectra(z):
 
     z_fft = torch.rfft(z, 1)
     #z_I = torch.sum(z_fft**2, dim = -1)
-    z_log1pI = torch.norm(z_fft, p = 2, dim = -1)
+    #z_log1pI = torch.norm(z_fft, p = 2, dim = -1)
     #z_log1pI = torch.log1p(z_I)
 
-    return z_log1pI</code></pre>
+    return z_fft</code></pre>
 </details>
 </dd>
 </dl>
 <h3>Methods</h3>
 <dl>
+<dt id="cp_detection.NeuralODE.LightningTrainer.TrainModel"><code class="name flex">
+<span>def <span class="ident">TrainModel</span></span>(<span>self, max_epochs=10000, checkpoint_path='./checkpoints')</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Trains the model using PyTorch_Lightning.trainer. </p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>model</code></strong> :&ensp;<code>An</code> <code>instance</code> of <code>PyTorch_Lightning.LightningModule</code></dt>
+<dd>Neural network to be trained.</dd>
+<dt><strong><code>max_epochs</code></strong> :&ensp;<code>integer</code></dt>
+<dd>Maximum number of training.</dd>
+<dt><strong><code>checkpoint_path</code></strong> :&ensp;<code>path</code></dt>
+<dd>Path to save the checkpointed model during training.</dd>
+</dl></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def TrainModel(self, max_epochs = 10000, checkpoint_path = &#39;./checkpoints&#39;):
+    &#34;&#34;&#34;
+    Trains the model using PyTorch_Lightning.trainer. 
+
+    Parameters
+    ----------
+    model : An instance of PyTorch_Lightning.LightningModule
+        Neural network to be trained. 
+    max_epochs : integer
+        Maximum number of training.
+    checkpoint_path : path
+        Path to save the checkpointed model during training.
+    &#34;&#34;&#34;
+    #logger = TensorBoardLogger(save_dir = os.getcwd(), version = self.slurm_job_id, name = &#39;lightning_logs&#39;)
+    checkpoint_callback = ModelCheckpoint(filepath = checkpoint_path, save_top_k = 1, verbose = True, monitor = &#39;loss&#39;, mode = &#39;min&#39;)
+    trainer = pl.Trainer(gpus = 1, checkpoint_callback = checkpoint_callback, early_stop_callback = None, show_progress_bar = True, max_nb_epochs = max_epochs, log_save_interval = 1)
+    trainer.fit(self)</code></pre>
+</details>
+</dd>
 <dt id="cp_detection.NeuralODE.LightningTrainer.configure_optimizers"><code class="name flex">
 <span>def <span class="ident">configure_optimizers</span></span>(<span>self)</span>
 </code></dt>
 <dd>
-<section class="desc"><p>Return a list of optimizers and a list of schedulers (could be empty)
-:return:</p></section>
+<section class="desc"><p>Choose what optimizers and learning-rate schedulers to use in your optimization.
+Normally you'd need one. But in the case of GANs or similar you might have multiple.</p>
+<p>If you don't define this method Lightning will automatically use Adam(lr=1e-3)</p>
+<p>Return: any of these 3 options:
+- Single optimizer
+- List or Tuple - List of optimizers
+- Two lists - The first list has multiple optimizers, the second a list of LR schedulers</p>
+<h2 id="examples">Examples</h2>
+<p>.. code-block:: python</p>
+<pre><code># most cases (default if not defined)
+def configure_optimizers(self):
+    opt = Adam(self.parameters(), lr=1e-3)
+    return opt
+
+# multiple optimizer case (eg: GAN)
+def configure_optimizers(self):
+    generator_opt = Adam(self.model_gen.parameters(), lr=0.01)
+    disriminator_opt = Adam(self.model_disc.parameters(), lr=0.02)
+    return generator_opt, disriminator_opt
+
+# example with learning_rate schedulers
+def configure_optimizers(self):
+    generator_opt = Adam(self.model_gen.parameters(), lr=0.01)
+    disriminator_opt = Adam(self.model_disc.parameters(), lr=0.02)
+    discriminator_sched = CosineAnnealing(discriminator_opt, T_max=10)
+    return [generator_opt, disriminator_opt], [discriminator_sched]
+
+# example with step-based learning_rate schedulers
+def configure_optimizers(self):
+    gen_opt = Adam(self.model_gen.parameters(), lr=0.01)
+    dis_opt = Adam(self.model_disc.parameters(), lr=0.02)
+    gen_sched = {'scheduler': ExponentialLR(gen_opt, 0.99),
+                 'interval': 'step'}  # called after each training step
+    dis_sched = CosineAnnealing(discriminator_opt, T_max=10) # called every epoch
+    return [gen_opt, dis_opt], [gen_sched, dis_sched]
+</code></pre>
+<p>Some things to know</p>
+<pre><code>- Lightning calls ``.backward()`` and ``.step()`` on each optimizer
+and learning rate scheduler as needed.
+
+- If you use 16-bit precision (``precision=16``), Lightning will automatically
+handle the optimizers for you.
+
+- If you use multiple optimizers, training_step will have an additional
+``optimizer_idx`` parameter.
+
+- If you use LBFGS lightning handles the closure function automatically for you
+
+- If you use multiple optimizers, gradients will be calculated only
+for the parameters of current optimizer at each training step.
+
+- If you need to control how often those optimizers step or override the
+default .step() schedule, override the `optimizer_step` hook.
+
+- If you only want to call a learning rate scheduler every `x` step or epoch,
+you can input this as 'frequency' key: dict(scheduler=lr_scheduler,
+                                            interval='step' or 'epoch', frequency=x)
+</code></pre></section>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -1176,10 +1548,50 @@ def LogSpectra(z):
 <span>def <span class="ident">forward</span></span>(<span>self, t, x0, d)</span>
 </code></dt>
 <dd>
-<section class="desc"><p>Expand model in into whatever you need.
-Also need to return the target
-:param x:
-:return:</p></section>
+<section class="desc"><p>Same as torch.nn.Module.forward(), however in Lightning you want this to define
+the
+operations you want to use for prediction (ie: on a server or as a feature extractor).</p>
+<p>Normally you'd call self.forward() from your training_step() method.
+This makes it easy to write a complex system for training with the outputs
+you'd want in a prediction setting.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>x</code></strong> :&ensp;<code>tensor</code></dt>
+<dd>Whatever
+you decide to define in the forward method</dd>
+</dl>
+<h2 id="return">Return</h2>
+<p>Predicted output</p>
+<h2 id="examples">Examples</h2>
+<p>.. code-block:: python</p>
+<pre><code># example if we were using this model as a feature extractor
+def forward(self, x):
+    feature_maps = self.convnet(x)
+    return feature_maps
+
+def training_step(self, batch, batch_idx):
+    x, y = batch
+    feature_maps = self.forward(x)
+    logits = self.classifier(feature_maps)
+
+    # ...
+    return loss
+
+# splitting it this way allows model to be used a feature extractor
+model = MyModelAbove()
+
+inputs = server.get_request()
+results = model(inputs)
+server.write_results(results)
+
+# -------------
+# This is in stark contrast to torch.nn.Module where normally you would have this:
+def forward(self, batch):
+    x, y = batch
+    feature_maps = self.convnet(x)
+    logits = self.classifier(feature_maps)
+    return logits
+</code></pre></section>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -1187,7 +1599,7 @@ Also need to return the target
 <pre><code class="python">def forward(self, t, x0, d):
     self.ODE.d = d.view(self.batch_size, 1)
 
-    x_pred = odeint(self.ODE, x0, t, method = self.solver)
+    x_pred = odeint(self.ODE, x0, t, method = self.solver, rtol = 1e-6)
     # x_pred has shape = [time, batch_size, 2]. Permute z_pred so that it has shape = [batch_size, time]
     z_pred = x_pred[:,:,1].permute(1,0)
 
@@ -1227,41 +1639,119 @@ Also need to return the target
 <span>def <span class="ident">train_dataloader</span></span>(<span>self)</span>
 </code></dt>
 <dd>
-<section class="desc"></section>
+<section class="desc"><p>Implement a PyTorch DataLoader</p>
+<h2 id="return">Return</h2>
+<p>PyTorch DataLoader
+Return a dataloader. It will not be called every epoch unless you set
+<code>Trainer(reload_dataloaders_every_epoch=True)</code>.</p>
+<p>It's recommended that all data downloads and preparation happen in prepare_data().</p>
+<div class="admonition note">
+<p class="admonition-title">Note:&ensp;Lightning adds the correct sampler for distributed and arbitrary hardware.</p>
+<p>No need to set yourself.</p>
+<ul>
+<li>.fit()</li>
+<li>&hellip;</li>
+<li>prepare_data()</li>
+<li>train_dataloader</li>
+</ul>
+</div>
+<h2 id="example">Example</h2>
+<p>.. code-block:: python</p>
+<pre><code>def train_dataloader(self):
+    transform = transforms.Compose([transforms.ToTensor(),
+                                    transforms.Normalize((0.5,), (1.0,))])
+    dataset = MNIST(root='/path/to/mnist/', train=True, transform=transform,
+                    download=True)
+    loader = torch.utils.data.DataLoader(
+        dataset=dataset,
+        batch_size=self.hparams.batch_size,
+        shuffle=True
+    )
+    return loader
+</code></pre></section>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def _get_data_loader(self):
-    try:
-        value = getattr(self, attr_name)
-    except AttributeError:
-        try:
-            value = fn(self)  # Lazy evaluation, done only once.
-            if (
-                    value is not None and
-                    not isinstance(value, list) and
-                    fn.__name__ in [&#39;test_dataloader&#39;, &#39;val_dataloader&#39;]
-            ):
-                value = [value]
-        except AttributeError as e:
-            # Guard against AttributeError suppression. (Issue #142)
-            traceback.print_exc()
-            error = f&#39;{fn.__name__}: An AttributeError was encountered: &#39; + str(e)
-            raise RuntimeError(error) from e
-        setattr(self, attr_name, value)  # Memoize evaluation.
-    return value</code></pre>
+<pre><code class="python">def train_dataloader(self):
+    return DataLoader(self.train_dataset, batch_size = self.batch_size, shuffle = True)</code></pre>
 </details>
 </dd>
 <dt id="cp_detection.NeuralODE.LightningTrainer.training_step"><code class="name flex">
 <span>def <span class="ident">training_step</span></span>(<span>self, batch, batch_nb)</span>
 </code></dt>
 <dd>
-<section class="desc"><p>return loss, dict with metrics for tqdm
-:param called with batch, batch_nb
-additional: optimizer_i if multiple optimizers used
-:return: dict with loss key and optional log, progress keys
-if implementing training_step, return whatever you need in that step</p></section>
+<section class="desc"><p>return loss, dict with metrics for tqdm</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt>batch (torch.nn.Tensor | (Tensor, Tensor) | [Tensor, Tensor]): The output of your</dt>
+<dt>dataloader. A tensor, tuple or list</dt>
+<dt><strong><code>batch_idx</code></strong> :&ensp;<code>int</code></dt>
+<dd>Integer displaying index of this batch</dd>
+<dt><strong><code>optimizer_idx</code></strong> :&ensp;<code>int</code></dt>
+<dd>If using multiple optimizers, this argument will also be present.</dd>
+</dl>
+<p>hiddens(:<code>Tensor &lt;https://pytorch.org/docs/stable/tensors.html&gt;</code>_):
+Passed in if truncated_bptt_steps &gt; 0.</p>
+<h2 id="return">Return</h2>
+<p>dict with loss key and optional log, progress keys
+if implementing training_step, return whatever you need in that step:</p>
+<pre><code>- loss -&gt; tensor scalar [REQUIRED]
+- progress_bar -&gt; Dict for progress bar display. Must have only tensors
+- log -&gt; Dict of metrics to add to logger. Must have only tensors (no images, etc)
+</code></pre>
+<p>In this step you'd normally do the forward pass and calculate the loss for a batch.
+You can also do fancier things like multiple forward passes or something model specific.</p>
+<h2 id="examples">Examples</h2>
+<p>.. code-block:: python</p>
+<pre><code>def training_step(self, batch, batch_idx):
+    x, y, z = batch
+
+    # implement your own
+    out = self.forward(x)
+    loss = self.loss(out, x)
+
+    logger_logs = {'training_loss': loss} # optional (MUST ALL BE TENSORS)
+
+    # if using TestTubeLogger or TensorBoardLogger you can nest scalars
+    logger_logs = {'losses': logger_logs} # optional (MUST ALL BE TENSORS)
+
+    output = {
+        'loss': loss, # required
+        'progress_bar': {'training_loss': loss}, # optional (MUST ALL BE TENSORS)
+        'log': logger_logs
+    }
+
+    # return a dict
+    return output
+</code></pre>
+<p>If you define multiple optimizers, this step will be called with an additional
+<code>optimizer_idx</code> param.</p>
+<p>.. code-block:: python</p>
+<pre><code># Multiple optimizers (ie: GANs)
+def training_step(self, batch, batch_idx, optimizer_idx):
+    if optimizer_idx == 0:
+        # do training_step with encoder
+    if optimizer_idx == 1:
+        # do training_step with decoder
+</code></pre>
+<p>If you add truncated back propagation through time you will also get an additional
+argument with the hidden states of the previous step.</p>
+<p>.. code-block:: python</p>
+<pre><code># Truncated back-propagation through time
+def training_step(self, batch, batch_idx, hiddens):
+    # hiddens are the hiddens from the previous truncated backprop step
+    ...
+    out, hiddens = self.lstm(data, hiddens)
+    ...
+
+    return {
+        "loss": ...,
+        "hiddens": hiddens  # remember to detach() this
+    }
+</code></pre>
+<p>You can also return a -1 instead of a dict to stop the current loop. This is useful
+if you want to break out of the current training epoch early.</p></section>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -1271,17 +1761,120 @@ if implementing training_step, return whatever you need in that step</p></sectio
     x0 = batch[&#39;x0&#39;].float()
     d = batch[&#39;d&#39;].float()
 
-    z_pred = self.forward(t, x0, d)
     z_true = batch[&#39;z&#39;].float()
+    N_data = z_true.size(1) # length of the validation data
+    
+    if self._verbose:
+        sys.stdout.write(&#39;\r&#39;)
+        sys.stdout.write(&#39;Forward-propagating...&#39;)
+        sys.stdout.flush()
 
-    log1pI_pred = self.LogSpectra(z_pred)
-    log1pI_true = self.LogSpectra(z_true)
-
+    z_pred = self.forward(t, x0, d)[:, -N_data:]
     loss_function = nn.MSELoss()
-    loss = loss_function(log1pI_pred, log1pI_true)
+    if self._fft_loss:
+        log1pI_pred = self.LogSpectra(z_pred)
+        log1pI_true = self.LogSpectra(z_true)
+
+        loss = loss_function(log1pI_pred, log1pI_true)
+    else:
+        loss = loss_function(z_true, z_pred)
+
+    if self._verbose:
+        sys.stdout.write(&#39;\r&#39;)
+        sys.stdout.write(&#39;Backward-propagating...&#39;)
+        sys.stdout.flush()
 
     tensorboard_logs = {&#39;train_loss&#39;: loss}
     return {&#39;loss&#39;: loss, &#39;log&#39;: tensorboard_logs}</code></pre>
+</details>
+</dd>
+<dt id="cp_detection.NeuralODE.LightningTrainer.validation_step"><code class="name flex">
+<span>def <span class="ident">validation_step</span></span>(<span>self, batch, batch_nb)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Operate on a single batch of data from the validation set
+In this step you'd might generate examples or calculate anything of interest like accuracy.</p>
+<p>.. code-block:: python</p>
+<pre><code># the pseudocode for these calls
+val_outs = []
+for val_batch in val_data:
+    out = validation_step(train_batch)
+    val_outs.append(out
+    validation_epoch_end(val_outs)
+</code></pre>
+<h2 id="args">Args</h2>
+<dl>
+<dt>batch (torch.nn.Tensor | (Tensor, Tensor) | [Tensor, Tensor]): The output of your</dt>
+<dt>dataloader. A tensor, tuple or list</dt>
+<dt><strong><code>batch_idx</code></strong> :&ensp;<code>int</code></dt>
+<dd>The index of this batch</dd>
+<dt><strong><code>dataloader_idx</code></strong> :&ensp;<code>int</code></dt>
+<dd>The index of the dataloader that produced this batch
+(only if multiple val datasets used)</dd>
+</dl>
+<h2 id="return">Return</h2>
+<p>Dict or OrderedDict - passed to validation_epoch_end.
+If you defined validation_step_end it will go to that first.
+.. code-block:: python</p>
+<pre><code># pseudocode of order
+out = validation_step()
+if defined('validation_step_end'):
+    out = validation_step_end(out)
+out = validation_epoch_end(out)
+</code></pre>
+<p>.. code-block:: python</p>
+<pre><code># if you have one val dataloader:
+def validation_step(self, batch, batch_idx)
+
+# if you have multiple val dataloaders:
+def validation_step(self, batch, batch_idx, dataloader_idx)
+</code></pre>
+<h2 id="examples">Examples</h2>
+<p>.. code-block:: python</p>
+<pre><code># CASE 1: A single validation dataset
+def validation_step(self, batch, batch_idx):
+    x, y = batch
+
+    # implement your own
+    out = self.forward(x)
+    loss = self.loss(out, y)
+
+    # log 6 example images
+    # or generated text... or whatever
+    sample_imgs = x[:6]
+    grid = torchvision.utils.make_grid(sample_imgs)
+    self.logger.experiment.add_image('example_images', grid, 0)
+
+    # calculate acc
+    labels_hat = torch.argmax(out, dim=1)
+    val_acc = torch.sum(y == labels_hat).item() / (len(y) * 1.0)
+
+    # all optional...
+    # return whatever you need for the collation function validation_end
+    output = OrderedDict({
+        'val_loss': loss_val,
+        'val_acc': torch.tensor(val_acc), # everything must be a tensor
+    })
+
+    # return an optional dict
+    return output
+</code></pre>
+<p>If you pass in multiple val datasets, validation_step will have an additional argument.</p>
+<p>.. code-block:: python</p>
+<div class="admonition note">
+<p class="admonition-title">Note:&ensp;If you don't need to validate you don't need to implement this method.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note:&ensp;When the validation_step is called, the model has been put in eval mode</p>
+<p>and PyTorch gradients have been disabled. At the end of validation,
+the model goes back to training mode and gradients are enabled.</p>
+</div></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def validation_step(self, batch, batch_nb):
+    pass</code></pre>
 </details>
 </dd>
 </dl>
@@ -1298,12 +1891,6 @@ if implementing training_step, return whatever you need in that step</p></sectio
 <li><h3>Super-module</h3>
 <ul>
 <li><code><a title="cp_detection" href="index.html">cp_detection</a></code></li>
-</ul>
-</li>
-<li><h3><a href="#header-functions">Functions</a></h3>
-<ul class="">
-<li><code><a title="cp_detection.NeuralODE.LoadModel" href="#cp_detection.NeuralODE.LoadModel">LoadModel</a></code></li>
-<li><code><a title="cp_detection.NeuralODE.TrainModel" href="#cp_detection.NeuralODE.TrainModel">TrainModel</a></code></li>
 </ul>
 </li>
 <li><h3><a href="#header-classes">Classes</a></h3>
@@ -1323,19 +1910,25 @@ if implementing training_step, return whatever you need in that step</p></sectio
 <li>
 <h4><code><a title="cp_detection.NeuralODE.GeneralModeDataset" href="#cp_detection.NeuralODE.GeneralModeDataset">GeneralModeDataset</a></code></h4>
 <ul class="">
+<li><code><a title="cp_detection.NeuralODE.GeneralModeDataset.AddNoise" href="#cp_detection.NeuralODE.GeneralModeDataset.AddNoise">AddNoise</a></code></li>
 <li><code><a title="cp_detection.NeuralODE.GeneralModeDataset.PlotData" href="#cp_detection.NeuralODE.GeneralModeDataset.PlotData">PlotData</a></code></li>
+<li><code><a title="cp_detection.NeuralODE.GeneralModeDataset.load" href="#cp_detection.NeuralODE.GeneralModeDataset.load">load</a></code></li>
+<li><code><a title="cp_detection.NeuralODE.GeneralModeDataset.save" href="#cp_detection.NeuralODE.GeneralModeDataset.save">save</a></code></li>
 </ul>
 </li>
 <li>
 <h4><code><a title="cp_detection.NeuralODE.LightningTrainer" href="#cp_detection.NeuralODE.LightningTrainer">LightningTrainer</a></code></h4>
 <ul class="">
+<li><code><a title="cp_detection.NeuralODE.LightningTrainer.LoadModel" href="#cp_detection.NeuralODE.LightningTrainer.LoadModel">LoadModel</a></code></li>
 <li><code><a title="cp_detection.NeuralODE.LightningTrainer.LogSpectra" href="#cp_detection.NeuralODE.LightningTrainer.LogSpectra">LogSpectra</a></code></li>
+<li><code><a title="cp_detection.NeuralODE.LightningTrainer.TrainModel" href="#cp_detection.NeuralODE.LightningTrainer.TrainModel">TrainModel</a></code></li>
 <li><code><a title="cp_detection.NeuralODE.LightningTrainer.configure_optimizers" href="#cp_detection.NeuralODE.LightningTrainer.configure_optimizers">configure_optimizers</a></code></li>
 <li><code><a title="cp_detection.NeuralODE.LightningTrainer.forward" href="#cp_detection.NeuralODE.LightningTrainer.forward">forward</a></code></li>
 <li><code><a title="cp_detection.NeuralODE.LightningTrainer.predict_force" href="#cp_detection.NeuralODE.LightningTrainer.predict_force">predict_force</a></code></li>
 <li><code><a title="cp_detection.NeuralODE.LightningTrainer.predict_z" href="#cp_detection.NeuralODE.LightningTrainer.predict_z">predict_z</a></code></li>
 <li><code><a title="cp_detection.NeuralODE.LightningTrainer.train_dataloader" href="#cp_detection.NeuralODE.LightningTrainer.train_dataloader">train_dataloader</a></code></li>
 <li><code><a title="cp_detection.NeuralODE.LightningTrainer.training_step" href="#cp_detection.NeuralODE.LightningTrainer.training_step">training_step</a></code></li>
+<li><code><a title="cp_detection.NeuralODE.LightningTrainer.validation_step" href="#cp_detection.NeuralODE.LightningTrainer.validation_step">validation_step</a></code></li>
 </ul>
 </li>
 </ul>

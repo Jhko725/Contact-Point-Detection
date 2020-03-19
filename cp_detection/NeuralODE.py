@@ -7,7 +7,7 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 from torchdiffeq import odeint_adjoint as odeint
 import matplotlib.pyplot as plt
-import json, sys, os
+import json, sys, os, inspect
 
 class GeneralModeDataset(Dataset):
     """
@@ -33,6 +33,10 @@ class GeneralModeDataset(Dataset):
         self.x0_array = np.zeros((self.d_array.size, 2))
         self.x0_array[:,1] = self.d_array
 
+    def __repr__(self):
+        repr_str = 'A general mode dataset with ODE parameters: ' + ', '.join('{} = {}'.format(k, v) for k, v in self.ode_params.items())
+        return repr_str
+
     def __len__(self):
         return len(self.d_array)
 
@@ -47,16 +51,40 @@ class GeneralModeDataset(Dataset):
         """
         return self.ode_params == other.ode_params
 
-    def PlotData(self, idx, figsize = (7, 5), fontsize = 14):
-        data = self.__getitem__(idx)
+    def AddNoise(self, SNR, seed = None):
+        """
+        Returns a new GeneralModeDataset object with added Gaussian noise corresponding to SNR
+        SNR is defined as $SNR = <z^2(t)>/\sigma^2$, where $noise ~ N(0, \sigma^2)$
+        """
+        np.random.seed(seed)
+        sqr_avg = np.mean(self.z_array**2, axis = -1)
+        var = sqr_avg/SNR
+
+        noise = np.stack([np.random.normal(0, v, size = self.z_array.shape[-1]) for v in var], axis = 0)
         
-        fig, ax = plt.subplots(1, 1, figsize = figsize)
-        ax.plot(data['time'], data['z'], '.k')
+        noisy_dataset = GeneralModeDataset(**self._savedict())
+        noisy_dataset.z_array += noise
+
+        return noisy_dataset
+
+    def PlotData(self, idx, ax, fontsize = 14, **kwargs):
+        data = self.__getitem__(idx)
+        z = data['z']
+        t = data['time'][-len(z):]
+        ax.scatter(t, z, **kwargs)
         ax.grid(ls = '--')
         ax.set_xlabel('Normalized Time', fontsize = fontsize)
         ax.set_ylabel('z (nm)', fontsize = fontsize)
 
-        return fig, ax
+        return ax
+
+    def _savedict(self):
+        """
+        Creates a dictionary containing only the necessary entries for the class constructor
+        Directly unpacking self.__dict__ into the constructor raises errors due to class attributes originally not present in the constructor arguments
+        """
+        savedict = {k: v for k, v in self.__dict__.items() if k in [p.name for p in inspect.signature(self.__init__).parameters.values()]}
+        return savedict
 
     def save(self, savepath):
         """
@@ -67,10 +95,15 @@ class GeneralModeDataset(Dataset):
         savepath : path
             Path to save the dataset at.
         """
+        savedict = self._savedict()
+        for k, v in savedict.items():
+            if isinstance(v, np.ndarray):
+                savedict[k] = v.tolist()
+
         with open(savepath, 'w') as savefile:
-            json.dump(self.__dict__, savefile)
+            json.dump(savedict, savefile)
         print('Saved data to: {}'.format(savepath))
-    
+
     @classmethod
     def load(cls, loadpath):
         """
@@ -124,7 +157,7 @@ class F_cons(nn.Module):
             List of the nodes in each of the hidden layers of the model
         """
         super(F_cons, self).__init__()
-        self.hidden_nodes = list(hidden_nodes)
+        self.hidden_nodes = np.array(hidden_nodes, dtype = int)
         self.layers = nn.ModuleList()
         for i in range(len(self.hidden_nodes)):
             if i == 0:
@@ -160,7 +193,7 @@ class F_cons(nn.Module):
         interm = self.layers[0](z)
         
         for layer in self.layers[1:]:
-            interm = self.elu(interm)
+            interm = self.tanh(interm)
             interm = layer(interm)
 
         #F = self.tanh(interm)
@@ -286,7 +319,7 @@ class LightningTrainer(pl.LightningModule):
     """
 
     #def __init__(self, train_dataset, lr = 0.05, hidden_nodes = [10, 10], batch_size = 1, solver = 'dopri5'):
-    def __init__(self, hparams, train_dataset, hidden_nodes, verbose = True):
+    def __init__(self, hparams, verbose = True):
         """
         Parameters
         ----------
@@ -305,13 +338,14 @@ class LightningTrainer(pl.LightningModule):
         """
         super(LightningTrainer, self).__init__()
         self.hparams = hparams
-        self.train_dataset = train_dataset
+        self.train_dataset = GeneralModeDataset.load(self.hparams.train_dataset_path)
         ode_params = self.train_dataset.ode_params
-        self.ODE = AFM_NeuralODE(**ode_params, hidden_nodes = hidden_nodes)
+        self.ODE = AFM_NeuralODE(**ode_params, hidden_nodes = self.hparams.hidden_nodes)
         self.batch_size = self.hparams.batch_size
         self.lr = self.hparams.lr
         self.solver = self.hparams.solver
         self._verbose = verbose
+        self._fft_loss = self.hparams.fft_loss
 
     def forward(self, t, x0, d):
         self.ODE.d = d.view(self.batch_size, 1)
@@ -336,12 +370,14 @@ class LightningTrainer(pl.LightningModule):
             sys.stdout.flush()
 
         z_pred = self.forward(t, x0, d)[:, -N_data:]
-        
-        log1pI_pred = self.LogSpectra(z_pred)
-        log1pI_true = self.LogSpectra(z_true)
-
         loss_function = nn.MSELoss()
-        loss = loss_function(log1pI_pred, log1pI_true)
+        if self._fft_loss:
+            log1pI_pred = self.LogSpectra(z_pred)
+            log1pI_true = self.LogSpectra(z_true)
+
+            loss = loss_function(log1pI_pred, log1pI_true)
+        else:
+            loss = loss_function(z_true, z_pred)
 
         if self._verbose:
             sys.stdout.write('\r')
@@ -351,7 +387,6 @@ class LightningTrainer(pl.LightningModule):
         tensorboard_logs = {'train_loss': loss}
         return {'loss': loss, 'log': tensorboard_logs}
 
-    @pl.data_loader
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size = self.batch_size, shuffle = True)
 

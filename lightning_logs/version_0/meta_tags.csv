@@ -1,0 +1,7 @@
+key,value
+lr,0.01
+batch_size,20
+solver,dopri5
+fft_loss,True
+train_dataset_path,./Data/digital_snr=1000.json
+hidden_nodes,"tensor([10., 10., 10.])"
