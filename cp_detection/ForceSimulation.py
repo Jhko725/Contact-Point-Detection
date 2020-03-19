@@ -4,8 +4,6 @@ import sys, abc
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-# Later on, create ABCs to wrap AFM model and force models.
-
 class ForcedHarmonicOscillator():
     """
     A class to model the AFM QTF/cantilever - sample system as a forced harmonic oscillator subject to a sinusodial driving force and a given tip-sample force F_int.
@@ -53,7 +51,7 @@ class ForcedHarmonicOscillator():
         self.k = k
         self.Om = Om
         self.A0 = A0
-        self.Fint = force_model.F
+        self.Fint = force_model
         self.T = 2*Q
 
     def get_ode(self, d):

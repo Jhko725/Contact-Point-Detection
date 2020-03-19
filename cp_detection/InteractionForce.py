@@ -1,12 +1,20 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import abc
+from numba import vectorize, float64
+import functools
 
 class TipSampleInteraction(abc.ABC):
 
+    def __init__(self):
+        self._F = self._get_F()
+
     @abc.abstractmethod
-    def F(self, x):
-        return None
+    def _get_F(self):
+        return lambda x, y: None
+
+    def __call__(self, x):
+        return self._F(x[1,:], x[0,:])
 
     def PlotForce(self, z_range, zdot_range, n_steps = 1000, figsize = (7, 5), fontsize = 14, **kwargs):
         """
@@ -18,7 +26,7 @@ class TipSampleInteraction(abc.ABC):
         zdot = np.linspace(*zdot_range, n_steps)
 
         x = np.vstack([zdot, z])
-        f = self.F(x).flatten()
+        f = self(x).flatten()
       
         if z_range[0] == z_range[1]:
             fig, ax = plt.subplots(1, 1, figsize = figsize)
@@ -45,10 +53,13 @@ class TipSampleInteraction(abc.ABC):
 class Null(TipSampleInteraction):
 
     def __init__(self):
-        pass
+       self._F = self._get_F()
 
-    def F(self, x):
-        return np.zeros((1, x.shape[-1]))
+    def _get_F(self):
+        @vectorize([float64(float64, float64)])
+        def _F(z = None, zdot = None):
+            return 0
+        return _F
 
 class DMT_Maugis(TipSampleInteraction):
     """
@@ -91,29 +102,21 @@ class DMT_Maugis(TipSampleInteraction):
         self.R = R
         self.z0 = z0
         self.E = 1/((1-vt**2)/Et + (1-vs**2)/Es)
-        
-    def F(self, x):
-        """
-        Computes the force corresponding to the given force model.
+        self._F = self._get_F()
 
-        Parameters
-        ----------
-        x : Numpy array with shape (2, k)
-            State vector, where each column corresponds to the form x = [y, z]', where y = dz/dt. 
-            k is the number of different x vectors in a single batch.
+    def _get_F(self):
+        z0 = self.z0
+        H = self.H
+        R = self.R
+        E = self.E
 
-        Returns
-        -------
-        F : Numpy array with shape (1, k)
-            Force corresponding to state vectors in each columns of the input x.
-        """
-        F = np.zeros((1, x.shape[-1]))
-        # Column indices of state vectors that fulfill the condition z<z0
-        iscontact = x[1, :]<self.z0
-        F[0, ~iscontact] = -self.H*self.R/(6*x[1, ~iscontact]**2)
-        F[0, iscontact] = (4/3)*self.E*np.sqrt(self.R)*(self.z0 - x[1, iscontact])**1.5 - self.H*self.R/(6*self.z0**2)
-
-        return F
+        @vectorize([float64(float64, float64)])
+        def _F(z, zdot = None):
+            if z > z0:
+                return -H*R/(6*z**2)
+            else:
+                return (4/3)*E*np.sqrt(R)*(z0 - z)**1.5 - H*R/(6*z0**2)
+        return _F
 
 class Capillary(TipSampleInteraction):
     """
@@ -154,9 +157,6 @@ class Capillary(TipSampleInteraction):
         self.app = app
         self.E = 1/((1-vt**2)/Et + (1-vs**2)/Es)
 
-        self.z_on = 2*h
-        self.z_off = self._z_off()
-
     def _z_off(self):
         gamma_sv = self.H/(24*np.pi*self.z0**2)
         r = (3*np.pi*gamma_sv*self.R**2/self.E)**(1/3)
@@ -164,24 +164,20 @@ class Capillary(TipSampleInteraction):
         z_off = V**(1/3) - V**(2/3)/(5*self.R)
         return z_off
 
-    def F(self, x):
-        """
-        Computes the force corresponding to the given force model.
+    def _get_F(self):
 
-        Parameters
-        ----------
-        x : Numpy array with shape (2, k)
-            State vector, where each column corresponds to the form x = [y, z]', where y = dz/dt. 
-            k is the number of different x vectors in a single batch.
+        R = self.R
+        h = self.h
+        gamma_lv = self.gamma_lv
+        app = self.app
 
-        Returns
-        -------
-        F : Numpy array with shape (1, k)
-            Force corresponding to state vectors in each columns of the input x.
-        """
-        F = np.zeros((1, x.shape[-1]))
-        iscapill = x[1, :]<self.z_on if self.app else x[1, :]<self.z_off
-
-        F[0, iscapill] = -4*np.pi*self.gamma_lv*self.R/(1 + x[1, iscapill]/self.h)
+        z_on = 2*self.h
+        z_off = self._z_off()
         
-        return F
+        @vectorize([float64(float64, float64)])
+        def _F(z, zdot = None):
+            if app:
+                return -4*np.pi*gamma_lv*R/(1 + z/h) if z<z_on else 0
+            else:
+                return -4*np.pi*gamma_lv*R/(1 + z/h) if z<z_off else 0
+        return _F    
