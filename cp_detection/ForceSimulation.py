@@ -21,6 +21,14 @@ class EquationOfMotion(abc.ABC):
             Default initial value for the state vector. m corresponds to the state dimensionality.
         """
         return None
+
+    @abc.abstractproperty
+    def tau(self):
+        """
+        A read-only property corresponding to the time constant of the given eom model.
+        This is used in cases where steady state dynamics are of the interest
+        """
+        return None
     
     def solve(self, d, t, x0 = None, **kwargs):
         """
@@ -95,7 +103,6 @@ class ForcedHarmonicOscillator(EquationOfMotion):
         self.Om = Om
         self.A0 = A0
         self.Fint = force_model
-        self.T = 2*Q
 
     def _get_eom(self, d):
         """
@@ -118,8 +125,8 @@ class ForcedHarmonicOscillator(EquationOfMotion):
         dxdt : Numpy array with shape (2, k)
             State vector, where each column corresponds to the form dxdt = [dydt, dzdt]'
         """
-        C1 = np.array([[-1./self.Q, -1.], [1., 0.]])
-        C2 = np.array([[1.], [0.]])
+        C1 = np.array([[-1/self.Q, -1], [1, 0]], dtype = float)
+        C2 = np.array([[1], [0]], dtype = float)
         
         def ode(t, x): 
             F = self.Fint(x)
@@ -130,7 +137,45 @@ class ForcedHarmonicOscillator(EquationOfMotion):
     def _get_default_x0(self, d):
         return np.array([0., d])
 
+    @property
+    def tau(self):
+        return 2*self.Q
+
     # Create function for plotting normalized tip-sample force
+
+class BimodalFHO(EquationOfMotion):
+
+    def __init__(self, Q0, Q1, k1, k2, Om, A00, A01, force_model):
+        self.Q0 = Q0
+        self.Q1 = Q1
+        self.k1 = k1
+        self.k2 = k2
+        self.Om = Om
+        self.A00 = A00
+        self.A01 = A01
+        self.Fint = force_model
+    
+    def _get_eom(self, d):
+        C1 = np.array([[-1/self.Q1, -1, 0, 0], [1, 0, 0, 0], [0, 0, -self.Om/self.Q1, -self.Om**2], [0, 0, 1, 0]], dtype = float)
+        C2 = np.array([[1], [0], [0], [0]], dtype = float)
+        C3 = np.array([[0], [0], [1], [0]], dtype = float)
+
+        def ode(t, x):
+            d_state = np.zeros(x[0:2, :].shape)
+            d_state[1, :] = d_state[1, :] + d
+            z_state = x[0:2, :] + x[2:, :] + d_state
+            F = self.Fint(z_state)
+
+            dxdt = np.matmul(C1, x) + np.matmul(C2, ((self.A00/self.Q0)*np.cos(t) + (self.A01/self.Q1)*np.cos(self.Om*t) + F/self.k1)) + np.matmul(C3, ((self.A00/self.Q0)*np.cos(t) + (self.A01/self.Q1)*np.cos(self.Om*t) + F/self.k2))
+            return dxdt
+        return ode
+        
+    def _get_default_x0(self, d = None):
+        return np.array([0., self.A00, 0., self.A01])
+
+    @property
+    def tau(self):
+        return 2*np.max(self.Q0, self.Q1)
 
 def SimulateGeneralMode(AFM, d_array, dt, N_data, relaxation = 7, x0 = None, **kwargs):
     """
@@ -161,7 +206,7 @@ def SimulateGeneralMode(AFM, d_array, dt, N_data, relaxation = 7, x0 = None, **k
         Each row corrresponds to data for a given average tip-sample distance d.
     """
     # Number of data points needed for relaxation
-    N_relax = np.ceil(AFM.T*relaxation/dt)
+    N_relax = np.ceil(AFM.tau*relaxation/dt)
     t = np.arange(N_relax+N_data)*dt
 
     d_array = np.array(d_array)
