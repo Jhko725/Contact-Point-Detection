@@ -4,7 +4,50 @@ import sys, abc
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-class ForcedHarmonicOscillator():
+class EquationOfMotion(abc.ABC):
+    
+    @abc.abstractmethod
+    def _get_eom(self, d):
+        return lambda t, x: None
+
+    @abc.abstractmethod
+    def _get_default_x0(self, d):
+        """
+        Returns the default initial value for the ode problem.
+
+        Returns
+        -------
+        x0 : Numpy array with shape (m, 1)
+            Default initial value for the state vector. m corresponds to the state dimensionality.
+        """
+        return None
+    
+    def solve(self, d, t, x0 = None, **kwargs):
+        """
+        Solves the ode and returns the solution.
+
+        Parameters
+        ----------
+        d : float [nm]
+            Average tip-sample distance.
+        t : 1D numpy array
+            Time to evaluate the ode solutions. Must be sorted in increasing order.
+        x0 : Numpy array with shape (m, 1)
+            Default initial value for the state vector. m corresponds to the state dimensionality.
+            If none is given, x0 falls back to the result of self._get_x0(). 
+        kwargs : dict
+            Keyword arguments for scipy.integrate.solve_ivp.
+        """
+
+        # If no explicit initial conditions are given, fall back to default initial conditions
+        if x0 == None:
+            x0 = self._get_default_x0(d)
+            
+        sol = solve_ivp(self._get_eom(d), (t[0], t[-1]), x0, t_eval = t, vectorized = True, **kwargs)
+
+        return sol
+
+class ForcedHarmonicOscillator(EquationOfMotion):
     """
     A class to model the AFM QTF/cantilever - sample system as a forced harmonic oscillator subject to a sinusodial driving force and a given tip-sample force F_int.
     Note that in this formulation, rescaled time t_rescaled = omega_0*t is used, and the quantity of interest is the instantaneous tip-sample distance z(t).
@@ -54,7 +97,7 @@ class ForcedHarmonicOscillator():
         self.Fint = force_model
         self.T = 2*Q
 
-    def get_ode(self, d):
+    def _get_eom(self, d):
         """
         Returns the corresponding ode function of the model. 
         x is a state vector, where each column corresponds to the form x = [y, z]', where y = dz/dt. 
@@ -84,27 +127,8 @@ class ForcedHarmonicOscillator():
             return dxdt
         return ode
     
-    def solve(self, d, t, x0 = None, **kwargs):
-        """
-        Solves the ode and returns the solution.
-
-        Parameters
-        ----------
-        d : float [nm]
-            Average tip-sample distance.
-        t : 1D numpy array
-            Time to evaluate the ode solutions. Must be sorted in increasing order.
-        x0 : Numpy array with shape (2, 1)
-            Initial value for the state vector. If none is given, x0 = [0, d]. 
-        kwargs : dict
-            Keyword arguments for scipy.integrate.solve_ivp.
-        """
-        if x0 == None:
-            x0 = np.array([0., d])
-            #x0 = np.array([self.Om*self.A0/np.sqrt(self.Q**2*(1-self.Om**2)**2 + self.Om**2), d])
-        sol = solve_ivp(self.get_ode(d), (t[0], t[-1]), x0, t_eval = t, vectorized = True, **kwargs)
-
-        return sol
+    def _get_default_x0(self, d):
+        return np.array([0., d])
 
     # Create function for plotting normalized tip-sample force
 
