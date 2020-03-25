@@ -8,6 +8,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from torchdiffeq import odeint_adjoint as odeint
 import matplotlib.pyplot as plt
 import json, sys, os, inspect
+from argparse import Namespace
 
 class GeneralModeDataset(Dataset):
     """
@@ -431,7 +432,7 @@ class LightningTrainer(pl.LightningModule):
         F_pred = self.ODE.Fc(d_tensor).cpu().detach().numpy()
         return F_pred
 
-    def TrainModel(self, max_epochs = 10000, checkpoint_path = './checkpoints'):
+    def TrainModel(self, max_epochs = 10000, checkpoint_path = '../checkpoints'):
         """
         Trains the model using PyTorch_Lightning.trainer. 
 
@@ -465,3 +466,18 @@ class LightningTrainer(pl.LightningModule):
             Loaded neural network.
         """
         return cls.load_from_checkpoint(checkpoint_path)
+
+if __name__ == '__main__':
+    if torch.cuda.is_available:
+        device = torch.device("cuda")
+        print("GPU is available")
+    else:
+        device = torch.device("cpu")
+        print("GPU not available, CPU used")
+
+    savepath = '../Data/digital_snr=1000.json'
+    hidden_nodes = torch.Tensor([10, 10, 10])
+    hparams = Namespace(**{'lr': 0.01, 'batch_size': 20, 'solver': 'rk4', 'fft_loss': True, 'train_dataset_path': savepath, 'hidden_nodes': hidden_nodes})
+    model = LightningTrainer(hparams)
+
+    model.TrainModel()
