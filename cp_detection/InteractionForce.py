@@ -9,6 +9,12 @@ class TipSampleInteraction(abc.ABC):
     def __init__(self):
         self._F = self._get_F()
 
+    def __neg__(self):
+        return NegateForce(self)
+
+    def __sum__(self, other):
+        return SumForce([self, other])
+
     @abc.abstractmethod
     def _get_F(self):
         return lambda x, y: None
@@ -50,7 +56,7 @@ class TipSampleInteraction(abc.ABC):
 
         return fig, ax
 
-class Null(TipSampleInteraction):
+class NullForce(TipSampleInteraction):
 
     def __init__(self):
        self._F = self._get_F()
@@ -59,6 +65,42 @@ class Null(TipSampleInteraction):
         @vectorize([float64(float64, float64)])
         def _F(z = None, zdot = None):
             return 0
+        return _F
+
+class ConstantForce(TipSampleInteraction):
+
+    def __init__(self, F0):
+        self.F0 = F0
+        self._F = self._get_F()
+
+    def _get_F(self):
+        @vectorize([float64(float64, float64)])
+        def _F(z = None, zdot = None):
+            return self.F0
+        return _F
+
+class NegateForce(TipSampleInteraction):
+
+    def __init__(self, force):
+        assert issubclass(type(force), TipSampleInteraction), "Input force must be a TipSampleInteraction!"
+        self.original_force = force
+        self._F = self._get_F()
+
+    def _get_F(self):
+        return lambda z, zdot: -self.original_force._F(z, zdot)
+
+class SumForce(TipSampleInteraction):
+
+    def __init__(self, force_list):
+        for force in force_list:
+            assert issubclass(type(force), TipSampleInteraction), "Input force must be a TipSampleInteraction!"
+        self.force_list = force_list
+        self._F = self._get_F()
+
+    def _get_F(self):
+        def _F(z, zdot):
+            F_list = [force._F(z, zdot) for force in self.force_list]
+            return sum(F_list)
         return _F
 
 class DMT_Maugis(TipSampleInteraction):
