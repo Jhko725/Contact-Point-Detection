@@ -3,6 +3,7 @@ from scipy.integrate import solve_ivp
 import sys, abc
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+from .InteractionForce import TipSampleInteraction
 
 class EquationOfMotion(abc.ABC):
     
@@ -21,6 +22,10 @@ class EquationOfMotion(abc.ABC):
             Default initial value for the state vector. m corresponds to the state dimensionality.
         """
         return None
+
+    @abc.abstractmethod
+    def _get_default_drive(self):
+        return lambda t: None
 
     @abc.abstractproperty
     def tau(self):
@@ -50,7 +55,7 @@ class EquationOfMotion(abc.ABC):
         # If no explicit initial conditions are given, fall back to default initial conditions
         if x0 == None:
             x0 = self._get_default_x0(d)
-            
+
         sol = solve_ivp(self._get_eom(d), (t[0], t[-1]), x0, t_eval = t, vectorized = True, **kwargs)
 
         return sol
@@ -104,7 +109,7 @@ class ForcedHarmonicOscillator(EquationOfMotion):
         self.A0 = A0
         self.Fint = force_model
 
-    def _get_eom(self, d):
+    def _get_eom(self, d, F_int, F_drive = None):
         """
         Returns the corresponding ode function of the model. 
         x is a state vector, where each column corresponds to the form x = [y, z]', where y = dz/dt. 
@@ -125,17 +130,33 @@ class ForcedHarmonicOscillator(EquationOfMotion):
         dxdt : Numpy array with shape (2, k)
             State vector, where each column corresponds to the form dxdt = [dydt, dzdt]'
         """
-        C1 = np.array([[-1/self.Q, -1], [1, 0]], dtype = float)
-        C2 = np.array([[1], [0]], dtype = float)
+        # Assignments for better readability
+        Q = self.Q
+        k = self.k
+
+        # Coefficient matrices
+        C1 = np.array([[-1/Q, -1], [1, 0]], dtype = float)
+        C2 = np.array([1, 0], dtype = float).reshape(2, 1)
         
-        def ode(t, x): 
-            F = self.Fint(x)
-            dxdt = np.matmul(C1, x) + np.matmul(C2, (d+(self.A0/self.Q)*(np.cos(self.Om*t))+F/self.k))
+        # Check forces, assign default to F_drive if passed None
+        assert issubclass(type(F_int), TipSampleInteraction), "F_int must be a TipSampleInteraction!"
+        if F_drive == None:
+            F_drive = self._get_default_drive()
+
+        def eom(t, x):
+            Fd = F_drive(t)
+            # Force Fts to be two-dimensional, with the second dimension being the batch size
+            Fts = F_int(x).reshape(1, -1)
+
+            dxdt = np.matmul(C1, x) + np.matmul(C2, (d + Fd/k + Fts/k))
             return dxdt
-        return ode
+        return eom
     
     def _get_default_x0(self, d):
         return np.array([0., d])
+
+    def _get_default_drive(self):
+        return lambda t: (self.k*self.A0/self.Q)*np.cos(t)
 
     @property
     def tau(self):
@@ -160,7 +181,7 @@ class BimodalFHO(EquationOfMotion):
         C2 = np.array([[1], [0], [0], [0]], dtype = float)
         C3 = np.array([[0], [0], [1], [0]], dtype = float)
 
-        def ode(t, x):
+        def eom(t, x):
             d_state = np.zeros(x[0:2, :].shape)
             d_state[1, :] = d_state[1, :] + d
             z_state = x[0:2, :] + x[2:, :] + d_state
@@ -168,8 +189,8 @@ class BimodalFHO(EquationOfMotion):
 
             dxdt = np.matmul(C1, x) + np.matmul(C2, ((self.A00/self.Q0)*np.cos(t) + (self.A01/self.Q1)*np.cos(self.Om*t) + F/self.k1)) + np.matmul(C3, ((self.A00/self.Q0)*np.cos(t) + (self.A01/self.Q1)*np.cos(self.Om*t) + F/self.k2))
             return dxdt
-        return ode
-        
+        return eom
+
     def _get_default_x0(self, d = None):
         return np.array([0., self.A00, 0., self.A01])
 

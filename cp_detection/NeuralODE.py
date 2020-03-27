@@ -55,7 +55,7 @@ class GeneralModeDataset(Dataset):
     def AddNoise(self, SNR, seed = None):
         """
         Returns a new GeneralModeDataset object with added Gaussian noise corresponding to SNR
-        SNR is defined as $SNR = <z^2(t)>/\sigma^2$, where $noise ~ N(0, \sigma^2)$
+        SNR is defined as $SNR = <z^2(t)>/\\sigma^2$, where $noise ~ N(0, \\sigma^2)$
         """
         np.random.seed(seed)
         sqr_avg = np.mean(self.z_array**2, axis = -1)

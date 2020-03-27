@@ -37,7 +37,7 @@ class TipSampleInteraction(abc.ABC):
         if z_range[0] == z_range[1]:
             fig, ax = plt.subplots(1, 1, figsize = figsize)
             ax.plot(zdot, f, **kwargs)
-            ax.set_xlabel('Scaled tip velocity $\omega_0\dot{z} (nm/s)$', fontsize = fontsize)
+            ax.set_xlabel(r'Scaled tip velocity $\omega_0\dot{z} (nm/s)$', fontsize = fontsize)
             ax.set_ylabel('Tip-sample interaction force $F_{int}$(nN)', fontsize = fontsize)
         elif zdot_range[0] == zdot_range[1]:
             fig, ax = plt.subplots(1, 1, figsize = figsize)
@@ -49,7 +49,7 @@ class TipSampleInteraction(abc.ABC):
             ax = fig.add_subplot(111, projection = '3d')
             ax.scatter(z, zdot, f, **kwargs)
             ax.set_xlabel('Tip displacement z(nm)', fontsize = fontsize)
-            ax.set_ylabel('Scaled tip velocity $\omega_0\dot{z} (nm/s)$', fontsize = fontsize)
+            ax.set_ylabel(r'Scaled tip velocity $\omega_0\dot{z} (nm/s)$', fontsize = fontsize)
             ax.set_zlabel('Tip-sample interaction force $F_{int}$(nN)', fontsize = fontsize)
 
         ax.grid(ls = '--')
