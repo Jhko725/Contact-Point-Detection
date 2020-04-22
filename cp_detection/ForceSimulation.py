@@ -177,6 +177,7 @@ class BimodalFHO(EquationOfMotion):
         self.Fint = force_model
     
     def _get_eom(self, d):
+        # Look into the equation. Is Q1 correct?
         C1 = np.array([[-1/self.Q1, -1, 0, 0], [1, 0, 0, 0], [0, 0, -self.Om/self.Q1, -self.Om**2], [0, 0, 1, 0]], dtype = float)
         C2 = np.array([[1], [0], [0], [0]], dtype = float)
         C3 = np.array([[0], [0], [1], [0]], dtype = float)
