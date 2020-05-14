@@ -171,10 +171,10 @@ class F_cons(nn.Module):
         self.tanh = nn.Tanh()
 
         # Initialize weights and biases
-        for m in self.modules():
-            if isinstance(m, nn.Linear):
-                nn.init.normal_(m.weight, mean=0, std=1.0e-5)
-                nn.init.constant_(m.bias, val=0)
+        #for m in self.modules():
+            #if isinstance(m, nn.Linear):
+                #nn.init.normal_(m.weight, mean=0, std=1.0e-5)
+                #nn.init.constant_(m.bias, val=0)
 
     def forward(self, z):
         """
@@ -192,10 +192,10 @@ class F_cons(nn.Module):
             Neural network output. Represents the modeled tip-sample force.
         """
         interm = self.layers[0](z)
-        
+        interm = self.tanh(interm)
         for layer in self.layers[1:]:
-            interm = self.tanh(interm)
             interm = layer(interm)
+            interm = self.elu(interm)
 
         #F = self.tanh(interm)
         return interm
@@ -340,12 +340,17 @@ class LightningTrainer(pl.LightningModule):
         self.train_dataset = GeneralModeDataset.load(self.hparams.train_dataset_path)
         ode_params = self.train_dataset.ode_params
         self.ODE = AFM_NeuralODE(**ode_params, hidden_nodes = self.hparams.hidden_nodes)
-        self.noise = nn.Parameter(torch.zeros( (len(self.train_dataset), 1000) ) )
+        #self.noise = nn.Parameter(torch.zeros( (len(self.train_dataset), 1000) ) )
         self.batch_size = self.hparams.batch_size
         self.lr = self.hparams.lr
         self.solver = self.hparams.solver
         self._verbose = verbose
         self._fft_loss = self.hparams.fft_loss
+        
+        # Compute initial guess for the x0 array and register it as an parameter
+        z_arr = self.train_dataset.z_array
+        y0_arr = (z_arr[:, 1] - z_arr[:, 0])/0.1
+        self.y0 = nn.Parameter(torch.Tensor(y0_arr))
 
     def forward(self, t, x0, d):
         self.ODE.d = d.view(self.batch_size, 1)
@@ -358,18 +363,13 @@ class LightningTrainer(pl.LightningModule):
 
     def training_step(self, batch, batch_nb):
         t = batch['time'][0].float()
-        x0 = batch['x0'].float()
         d = batch['d'].float()
-
         z_true = batch['z'].float()
-        N_data = z_true.size(1) # length of the validation data
-        
-        if self._verbose:
-            sys.stdout.write('\r')
-            sys.stdout.write('Forward-propagating...')
-            sys.stdout.flush()
+        #y0 = (z_true[:, 1] - z_true[:, 0])/0.1
+        x0 = torch.cat([self.y0.view(-1, 1), z_true[:,0].view(-1, 1)], dim = -1)
+        #N_data = z_true.size(1) # length of the validation data
 
-        z_pred = self.forward(t, x0, d)[:, -N_data:] - self.noise
+        z_pred = self.forward(t, x0, d)
         
         loss_function = nn.MSELoss()
         if self._fft_loss:
@@ -380,24 +380,13 @@ class LightningTrainer(pl.LightningModule):
         else:
             loss = loss_function(z_true, z_pred)
 
-        loss = loss + 10*torch.norm(self.noise, p = 2, dim = None)
-
-        if self._verbose:
-            sys.stdout.write('\r')
-            sys.stdout.write('Backward-propagating...')
-            sys.stdout.flush()
+        #loss = loss + 10*torch.norm(self.noise, p = 2, dim = None)
 
         tensorboard_logs = {'train_loss': loss}
         return {'loss': loss, 'log': tensorboard_logs}
 
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size = self.batch_size, num_workers = 2, shuffle = False)
-
-    #def validation_step(self, batch, batch_nb):
-        #pass
-    
-    #def val_dataloader(self):
-        #pass
 
     @staticmethod
     def LogSpectra(z):
