@@ -107,9 +107,10 @@ class ForcedHarmonicOscillator(EquationOfMotion):
         self.k = k
         self.Om = Om
         self.A0 = A0
+        assert issubclass(type(force_model), TipSampleInteraction), "F_int must be a TipSampleInteraction!"
         self.Fint = force_model
 
-    def _get_eom(self, d, F_int, F_drive = None):
+    def _get_eom(self, d, F_drive = None):
         """
         Returns the corresponding ode function of the model. 
         x is a state vector, where each column corresponds to the form x = [y, z]', where y = dz/dt. 
@@ -139,14 +140,14 @@ class ForcedHarmonicOscillator(EquationOfMotion):
         C2 = np.array([1, 0], dtype = float).reshape(2, 1)
         
         # Check forces, assign default to F_drive if passed None
-        assert issubclass(type(F_int), TipSampleInteraction), "F_int must be a TipSampleInteraction!"
+        
         if F_drive == None:
             F_drive = self._get_default_drive()
 
         def eom(t, x):
             Fd = F_drive(t)
             # Force Fts to be two-dimensional, with the second dimension being the batch size
-            Fts = F_int(x).reshape(1, -1)
+            Fts = self.Fint(x).reshape(1, -1)
 
             dxdt = np.matmul(C1, x) + np.matmul(C2, (d + Fd/k + Fts/k))
             return dxdt
@@ -223,24 +224,26 @@ def SimulateGeneralMode(AFM, d_array, dt, N_data, relaxation = 7, x0 = None, **k
     -------
     t : numpy 1D array
         Time array used to solve the ode
-    z_array : numpy 2D array with dimensions (len(d_array), N_data)
+    x_array : numpy 3D array with dimensions (len(d_array), 2, N_data)
         Simulated general mode approach curve data. 
-        Each row corrresponds to data for a given average tip-sample distance d.
+        The first dimension corrresponds to a given average tip-sample distance d.
+        The second dimension corresponds to the dimension of the state vector x in the form (z_dot, z)
+        The last dimension is the time series data dimension
     """
     # Number of data points needed for relaxation
     N_relax = np.ceil(AFM.tau*relaxation/dt)
     t = np.arange(N_relax+N_data)*dt
 
     d_array = np.array(d_array)
-    z_array = np.zeros((d_array.size, N_data))
+    x_array = np.zeros((d_array.size, 2, N_data))
 
     sys.stdout.write('Data generation started\n')
     for i in range(d_array.size):
         sol = AFM.solve(d_array[i], t, x0 = x0, **kwargs)
-        z_array[i, :] = sol.y[1, -N_data:]
+        x_array[i, :, :] = sol.y[:, -N_data:]
     
         sys.stdout.write('\r')
         sys.stdout.write('{:d}/{:d} generated'.format(i+1, d_array.size))
         sys.stdout.flush()
 
-    return t, z_array
+    return t, x_array

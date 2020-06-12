@@ -15,7 +15,7 @@ class GeneralModeDataset(Dataset):
     A PyTorch Dataset to handle general mode AFM data. 
     """
 
-    def __init__(self, t, d_array, z_array, ode_params):
+    def __init__(self, t, d_array, x_array, ode_params):
         """
         Parameters
         ----------
@@ -25,14 +25,12 @@ class GeneralModeDataset(Dataset):
             Dictionary containing the necessary parameters for the ODE. 
             Required form is ode_params = {'A0' : float, 'Q' : float, 'Om' : float, 'k' : float}
         """
-        # Needs modifying - in the final form, we do not necessarily need x0 in both the model and the dataset
+
         self.t = np.array(t)
         self.d_array = np.array(d_array)
-        self.z_array = np.array(z_array)
+        self.x_array = np.array(x_array)
+        self.z_array = self.x_array[:,1,:]
         self.ode_params = ode_params
-        # Need to modify x0_array later
-        self.x0_array = np.zeros((self.d_array.size, 2))
-        self.x0_array[:,1] = self.d_array
 
     def __repr__(self):
         repr_str = 'A general mode dataset with ODE parameters: ' + ', '.join('{} = {}'.format(k, v) for k, v in self.ode_params.items())
@@ -43,7 +41,7 @@ class GeneralModeDataset(Dataset):
 
     def __getitem__(self, idx):
         #sample = {'time': self.t, 'd': self.d_list[idx], 'x0': self.x0, 'z': self.z_list[idx][:]}
-        sample = {'time': self.t, 'd': self.d_array[idx], 'x0': self.x0_array[idx][:],'z': self.z_array[idx][:]}
+        sample = {'time': self.t[:1000]-self.t[0], 'd': self.d_array[idx],'z': self.z_array[idx][:1000]}
         return sample
 
     def __eq__(self, other):
@@ -54,7 +52,7 @@ class GeneralModeDataset(Dataset):
 
     def AddNoise(self, SNR, seed = None):
         """
-        Returns a new GeneralModeDataset object with added Gaussian noise corresponding to SNR
+        Adds Gaussian noise corresponding to SNR to the z_array data
         SNR is defined as $SNR = <z^2(t)>/\\sigma^2$, where $noise ~ N(0, \\sigma^2)$
         """
         np.random.seed(seed)
@@ -63,29 +61,18 @@ class GeneralModeDataset(Dataset):
 
         noise = np.stack([np.random.normal(0, v, size = self.z_array.shape[-1]) for v in var], axis = 0)
         
-        noisy_dataset = GeneralModeDataset(**self._savedict())
-        noisy_dataset.z_array += noise
+        self.z_array += noise
 
-        return noisy_dataset
-
-    def PlotData(self, idx, ax, fontsize = 14, **kwargs):
+    def PlotData(self, idx, ax, N_data = 0, fontsize = 14, **kwargs):
         data = self.__getitem__(idx)
         z = data['z']
         t = data['time'][-len(z):]
-        ax.scatter(t, z, **kwargs)
+        ax.scatter(t[-N_data:], z[-N_data:], **kwargs)
         ax.grid(ls = '--')
         ax.set_xlabel('Normalized Time', fontsize = fontsize)
         ax.set_ylabel('z (nm)', fontsize = fontsize)
 
         return ax
-
-    def _savedict(self):
-        """
-        Creates a dictionary containing only the necessary entries for the class constructor
-        Directly unpacking self.__dict__ into the constructor raises errors due to class attributes originally not present in the constructor arguments
-        """
-        savedict = {k: v for k, v in self.__dict__.items() if k in [p.name for p in inspect.signature(self.__init__).parameters.values()]}
-        return savedict
 
     def save(self, savepath):
         """
@@ -96,7 +83,7 @@ class GeneralModeDataset(Dataset):
         savepath : path
             Path to save the dataset at.
         """
-        savedict = self._savedict()
+        savedict = self.__dict__
         for k, v in savedict.items():
             if isinstance(v, np.ndarray):
                 savedict[k] = v.tolist()
@@ -121,9 +108,12 @@ class GeneralModeDataset(Dataset):
             Loaded dataset.
         """
         with open(loadpath) as loadfile:
-            data_dict = json.load(loadfile)
+            loaddict = json.load(loadfile)
         
-        return cls(**data_dict)
+        constructor_dict = {k: v for k, v in loaddict.items() if k in [p.name for p in inspect.signature(cls.__init__).parameters.values()]}
+        dataset = cls(**constructor_dict)
+        dataset.__dict__['x_array'] = loaddict['z_array']
+        return dataset
 
 class F_cons(nn.Module):
     """
@@ -192,13 +182,30 @@ class F_cons(nn.Module):
             Neural network output. Represents the modeled tip-sample force.
         """
         interm = self.layers[0](z)
-        interm = self.tanh(interm)
+
         for layer in self.layers[1:]:
-            interm = layer(interm)
             interm = self.elu(interm)
+            interm = layer(interm)
 
         #F = self.tanh(interm)
         return interm
+
+class Zdot_Encoder(nn.Module):
+
+    def __init__(self, input_channel, channels = [10]):
+        super(Zdot_Encoder, self).__init__()
+
+        self.channels = np.array(channels, dtype = int)
+
+        self.layers = nn.ModuleList()
+        for i in range(len(self.channels)):
+            if i == 0:
+                self.layers.append(nn.Conv1d(input_channel, self.channels[i], kernel_size = 3))
+            else:
+                self.layers.append(nn.Conv1d(self.channels[i-1], self.channels[i], kernel_size = 3))
+        self.layers.append(nn.Conv1d(self.channels[i], 1, kernel_size = 1))
+        self.dense = nn.Conv1d()
+        self.elu = nn.ELU()
 
 class AFM_NeuralODE(nn.Module):
     """
@@ -345,7 +352,6 @@ class LightningTrainer(pl.LightningModule):
         self.lr = self.hparams.lr
         self.solver = self.hparams.solver
         self._verbose = verbose
-        self._fft_loss = self.hparams.fft_loss
         
         # Compute initial guess for the x0 array and register it as an parameter
         z_arr = self.train_dataset.z_array
@@ -372,15 +378,8 @@ class LightningTrainer(pl.LightningModule):
         z_pred = self.forward(t, x0, d)
         
         loss_function = nn.MSELoss()
-        if self._fft_loss:
-            log1pI_pred = self.LogSpectra(z_pred)
-            log1pI_true = self.LogSpectra(z_true)
 
-            loss = loss_function(log1pI_pred, log1pI_true)
-        else:
-            loss = loss_function(z_true, z_pred)
-
-        #loss = loss + 10*torch.norm(self.noise, p = 2, dim = None)
+        loss = loss_function(z_pred, z_true)
 
         tensorboard_logs = {'train_loss': loss}
         return {'loss': loss, 'log': tensorboard_logs}
@@ -388,37 +387,14 @@ class LightningTrainer(pl.LightningModule):
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size = self.batch_size, num_workers = 2, shuffle = False)
 
-    @staticmethod
-    def LogSpectra(z):
-        """
-        Calculates the complex FFT spectra of the given signal z(t), then calculates the intensity. Finally, returns log1p(intensity), where log1p is preferred over log due to its numerical stability.
-
-        Parameters
-        ----------
-        z : A 1D PyTorch tensor
-            1D tensor of real values, corresponding to the time series z(t)
-
-        Returns
-        -------
-        z_log1pI : A 1d Pytorch tensor
-            1D tensor corresponding to the log1p of the Fourier intensity of z(t).
-        """
-
-        z_fft = torch.rfft(z, 1)
-        #z_I = torch.sum(z_fft**2, dim = -1)
-        #z_log1pI = torch.norm(z_fft, p = 2, dim = -1)
-        #z_log1pI = torch.log1p(z_I)
-
-        return z_fft
-
     def configure_optimizers(self):
-        optim = torch.optim.Adam(self.parameters(), lr = self.lr)
-        #optim = torch.optim.LBFGS(self.parameters(), lr = self.lr)
+        #optim = torch.optim.Adam(self.parameters(), lr = self.lr)
+        optim = torch.optim.LBFGS(self.parameters(), lr = self.lr)
         #sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, 'min', 0.5, 100, threshold = 0.05, threshold_mode = 'rel')
         #return [optim], [sched]
         return optim
 
-    def predict_z(self):
+    def predict_z(self, z):
         pass
 
     def predict_force(self, d):
